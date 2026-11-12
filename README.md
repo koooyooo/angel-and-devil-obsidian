@@ -6,7 +6,7 @@
 
 An angel 😇 and a devil 😈 read your note and banter about it. The angel finds concrete things to praise; the devil teases your slips and smuggles in one real, sharp point per turn.
 
-https://github.com/user-attachments/assets/e56e01a6-6818-42c9-bfd0-7fbfea3b091f
+https://github.com/user-attachments/assets/c8639819-61c3-4158-adbb-76ce91a943aa
 
 Status: **Phase 2 in progress** — text banter, animated modal, save to note, and read aloud with Gemini TTS (two voices, pitch-preserving speed, characters react to the voice).
 

@@ -1,0 +1,723 @@
+/* Angel & Devil — banter modal (design doc §5.7). All selectors are prefixed with .aad- */
+
+.aad-modal {
+  --aad-ink: #1b1633;
+  --aad-paper: #fffdf6;
+  --aad-angel: #ffc93c;
+  --aad-angel-soft: #fff1c2;
+  --aad-devil: #ff4f9a;
+  --aad-devil-deep: #d6006f;
+  --aad-devil-soft: #ffd6e8;
+  --aad-chamfer: polygon(40px 0, 100% 0, 100% calc(100% - 40px), calc(100% - 40px) 100%, 0 100%, 0 40px);
+  --aad-burst-color: rgba(255, 201, 60, 0.2);
+}
+
+/* ---------- Modal shell ---------- */
+
+.aad-container .modal-bg {
+  background: rgba(14, 10, 30, 0.6);
+  backdrop-filter: blur(5px);
+  opacity: 1;
+}
+
+.modal.aad-modal {
+  width: min(1100px, 94vw);
+  max-width: none;
+  height: min(760px, 90vh);
+  max-height: none;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+/* Yellow offset shadow behind the chamfered frame */
+.modal.aad-modal::before {
+  content: "";
+  position: absolute;
+  inset: 12px -12px -12px 12px;
+  background: var(--aad-angel);
+  clip-path: var(--aad-chamfer);
+  pointer-events: none;
+}
+
+/* Hide everything Obsidian puts in the modal besides our content (built-in close button, title/header). */
+.modal.aad-modal > :not(.modal-content) {
+  display: none !important;
+}
+
+/* Small, always-visible close button (about the size of a macOS window button).
+   The hit area is enlarged with ::before so it stays easy to click / tap. */
+.aad-modal button.aad-close {
+  position: relative;
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--aad-ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+.aad-modal button.aad-close::before {
+  content: "";
+  position: absolute;
+  inset: -11px;
+}
+.aad-modal button.aad-close:hover {
+  background: var(--aad-devil);
+  color: #fff;
+  transform: scale(1.1);
+}
+.aad-modal button.aad-close:focus-visible {
+  outline: 2px solid var(--aad-angel);
+  outline-offset: 3px;
+}
+.aad-modal button.aad-close svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 3.5px;
+}
+.aad-mobile button.aad-close {
+  width: 28px;
+  height: 28px;
+}
+.aad-mobile button.aad-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.aad-modal .modal-content {
+  position: relative;
+  height: 100%;
+  padding: 5px;
+  box-sizing: border-box;
+  background: #fff;
+  clip-path: var(--aad-chamfer);
+}
+
+.aad-panel {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 28px 22px;
+  color: #fff;
+  background-color: var(--aad-ink);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1.3px, transparent 1.8px);
+  background-size: 12px 12px;
+  clip-path: polygon(37px 0, 100% 0, 100% calc(100% - 37px), calc(100% - 37px) 100%, 0 100%, 0 37px);
+}
+
+.aad-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 10px 0 18px;
+}
+
+.aad-title {
+  background: #fff;
+  color: var(--aad-ink);
+  padding: 4px 18px 6px;
+  border-radius: 6px;
+  transform: rotate(-2deg);
+  box-shadow: 5px 5px 0 var(--aad-angel);
+  font-weight: 900;
+  font-size: 1.35em;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Stage ---------- */
+
+.aad-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) 200px;
+  gap: 20px;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.aad-burst {
+  position: absolute;
+  left: 14%;
+  top: 50%;
+  width: 1600px;
+  height: 1600px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: repeating-conic-gradient(from 0deg, var(--aad-burst-color) 0deg 5deg, transparent 5deg 13deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 8%, #000 20%, transparent 56%);
+  mask-image: radial-gradient(circle, transparent 8%, #000 20%, transparent 56%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s, left 0.4s;
+  animation: aad-burst 28s linear infinite;
+}
+.aad-stage:has(.aad-char.is-speaking) .aad-burst {
+  opacity: 1;
+}
+.aad-stage:has(.aad-char.is-counter.is-speaking) .aad-burst,
+.aad-stage:has(.aad-char.is-devil.is-speaking) .aad-burst {
+  left: 86%;
+  --aad-burst-color: rgba(255, 79, 154, 0.24);
+}
+
+/* ---------- Characters ---------- */
+
+.aad-char {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.aad-char-frame {
+  width: 180px;
+  aspect-ratio: 200 / 240;
+  border: 5px solid #fff;
+  border-radius: 8px;
+  background-size: 12px 12px;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.35);
+  filter: grayscale(0.75) brightness(0.7);
+  transition: filter 0.25s;
+}
+.aad-char.is-lead .aad-char-frame,
+.aad-char.is-angel .aad-char-frame {
+  background-color: var(--aad-char-frame-bg, var(--aad-angel));
+  background-image: radial-gradient(rgba(27, 22, 51, 0.15) 2px, transparent 2.6px);
+  transform: rotate(-4deg);
+}
+.aad-char.is-counter .aad-char-frame,
+.aad-char.is-devil .aad-char-frame {
+  background-color: var(--aad-char-frame-bg, var(--aad-devil-deep));
+  background-image: radial-gradient(rgba(0, 0, 0, 0.2) 2px, transparent 2.6px);
+  transform: rotate(5deg);
+}
+.aad-char.is-speaking .aad-char-frame {
+  filter: none;
+}
+
+.aad-symbol {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.aad-char.is-speaking .aad-symbol {
+  animation: aad-hop 0.8s ease-in-out infinite;
+}
+.aad-stage.is-loading .aad-symbol {
+  animation: aad-think 1.8s ease-in-out infinite;
+}
+.aad-stage.is-loading .aad-char.is-counter .aad-symbol,
+.aad-stage.is-loading .aad-char.is-devil .aad-symbol {
+  animation-delay: -0.9s;
+}
+
+.aad-wing {
+  transform-box: view-box;
+}
+.aad-wing-l {
+  transform-origin: 92px 140px;
+}
+.aad-wing-r {
+  transform-origin: 108px 140px;
+}
+.aad-char.is-speaking .aad-wing-l {
+  animation: aad-flap-l 0.5s ease-in-out infinite;
+}
+.aad-char.is-speaking .aad-wing-r {
+  animation: aad-flap-r 0.5s ease-in-out infinite;
+}
+.aad-halo {
+  transform-box: view-box;
+  transform-origin: 100px 64px;
+}
+.aad-char.is-speaking .aad-halo {
+  animation: aad-halo 0.38s ease-in-out infinite alternate;
+}
+.aad-glow-white {
+  filter: drop-shadow(0 0 6px #fff);
+}
+.aad-glow-pink {
+  filter: drop-shadow(0 0 6px var(--aad-devil));
+}
+
+.aad-char-name {
+  font-weight: 900;
+  font-size: 1.15em;
+}
+.aad-char.is-lead .aad-char-name,
+.aad-char.is-angel .aad-char-name {
+  color: var(--aad-char-name-color, var(--aad-angel));
+}
+.aad-char.is-counter .aad-char-name,
+.aad-char.is-devil .aad-char-name {
+  color: var(--aad-char-name-color, #ff8cc0);
+}
+
+.aad-char-status {
+  padding: 2px 12px;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  font-size: 0.8em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+}
+.aad-char.is-speaking .aad-char-status {
+  border-color: transparent;
+  color: var(--aad-ink);
+}
+.aad-char.is-lead.is-speaking .aad-char-status,
+.aad-char.is-angel.is-speaking .aad-char-status {
+  background: var(--aad-char-primary, var(--aad-angel));
+}
+.aad-char.is-counter.is-speaking .aad-char-status,
+.aad-char.is-devil.is-speaking .aad-char-status {
+  background: var(--aad-char-primary, var(--aad-devil));
+}
+
+/* ---------- Bubbles ---------- */
+
+.aad-log {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 18px 14px 18px 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.aad-log > :first-child {
+  margin-top: auto;
+}
+
+.aad-bubble {
+  max-width: 88%;
+  display: flex;
+  flex-direction: column;
+  opacity: 0.55;
+  transition: opacity 0.25s;
+}
+.aad-bubble.is-lead,
+.aad-bubble.is-angel {
+  align-self: flex-start;
+}
+.aad-bubble.is-counter,
+.aad-bubble.is-devil {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.aad-bubble.is-current {
+  opacity: 1;
+  animation: aad-pop 0.45s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.aad-bubble.is-counter.is-current .aad-bubble-body,
+.aad-bubble.is-devil.is-current .aad-bubble-body {
+  animation: aad-shake 0.6s ease-in-out 0.3s 1;
+}
+
+.aad-nameplate {
+  align-self: flex-start;
+  position: relative;
+  z-index: 1;
+  margin: 0 18px -12px;
+  padding: 2px 16px 4px;
+  border: 3px solid var(--aad-ink);
+  color: var(--aad-ink);
+  font-weight: 900;
+  transform: skewX(-10deg) rotate(-3deg);
+}
+.aad-bubble.is-lead .aad-nameplate,
+.aad-bubble.is-angel .aad-nameplate {
+  background: var(--aad-char-primary, var(--aad-angel));
+}
+.aad-bubble.is-counter .aad-nameplate,
+.aad-bubble.is-devil .aad-nameplate {
+  align-self: flex-end;
+  background: var(--aad-char-primary, var(--aad-devil));
+}
+
+.aad-bubble-body {
+  padding: 22px 22px 16px;
+  border: 4px solid var(--aad-ink);
+  border-radius: 4px;
+  background: var(--aad-paper);
+  color: var(--aad-ink);
+  font-weight: 700;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  user-select: text;
+}
+.aad-bubble.is-lead .aad-bubble-body,
+.aad-bubble.is-angel .aad-bubble-body {
+  box-shadow: 8px 8px 0 var(--aad-char-primary, var(--aad-angel));
+}
+.aad-bubble.is-counter .aad-bubble-body,
+.aad-bubble.is-devil .aad-bubble-body {
+  box-shadow: -8px 8px 0 var(--aad-char-primary, var(--aad-devil));
+}
+.aad-bubble.is-current .aad-bubble-body {
+  font-size: 1.08em;
+}
+
+.aad-thinking,
+.aad-error {
+  align-self: center;
+  margin-top: auto;
+  margin-bottom: auto;
+  padding: 14px 22px;
+  border: 4px solid var(--aad-ink);
+  border-radius: 4px;
+  background: var(--aad-paper);
+  color: var(--aad-ink);
+  font-weight: 800;
+  box-shadow: 8px 8px 0 var(--aad-angel);
+}
+.aad-error {
+  box-shadow: 8px 8px 0 var(--aad-devil);
+}
+
+/* ---------- Loading screen (steps + tip cards) ---------- */
+
+.aad-loading {
+  margin: auto;
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.aad-steps {
+  list-style: none;
+  margin: 0;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 4px solid var(--aad-ink);
+  border-radius: 4px;
+  background: var(--aad-paper);
+  color: var(--aad-ink);
+  box-shadow: 8px 8px 0 var(--aad-angel);
+  font-weight: 800;
+}
+.aad-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0.4;
+}
+.aad-step.is-active,
+.aad-step.is-done {
+  opacity: 1;
+}
+.aad-step-mark {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 3px solid currentColor;
+  border-radius: 50%;
+}
+.aad-step.is-active .aad-step-mark {
+  border-color: var(--aad-devil) transparent var(--aad-devil) var(--aad-devil);
+  animation: aad-spin 0.8s linear infinite;
+}
+.aad-step.is-done .aad-step-mark {
+  border-color: var(--aad-ink);
+  background: var(--aad-angel);
+}
+
+.aad-tip {
+  padding: 14px 20px 16px;
+  border: 3px dashed rgba(255, 255, 255, 0.45);
+  border-radius: 4px;
+  transform: rotate(-1deg);
+}
+.aad-tip-label {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 1px 10px;
+  background: var(--aad-devil);
+  color: var(--aad-ink);
+  font-size: 0.8em;
+  font-weight: 900;
+  transform: skewX(-10deg);
+}
+.aad-tip-text {
+  min-height: 3.4em;
+  line-height: 1.7;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+.aad-tip-text.is-in {
+  animation: aad-fade-in 0.5s ease-out both;
+}
+.aad-mobile .aad-loading {
+  gap: 14px;
+}
+
+/* ---------- Read aloud (Phase 2, F-6.6) ---------- */
+
+/* While audio plays, the speaking character follows the loudness (--aad-level, 0–1) instead of a loop. */
+.aad-stage.is-audio .aad-char.is-speaking .aad-symbol {
+  animation: none;
+  transform: translateY(calc(var(--aad-level, 0) * -10px));
+  transition: transform 0.06s linear;
+}
+.aad-stage.is-audio .aad-char.is-speaking .aad-halo {
+  animation: none;
+  transform: scale(calc(0.94 + var(--aad-level, 0) * 0.22));
+  opacity: calc(0.7 + var(--aad-level, 0) * 0.3);
+}
+.aad-stage.is-audio .aad-char.is-speaking .aad-wing-l {
+  animation: none;
+  transform: rotate(calc(var(--aad-level, 0) * -16deg));
+}
+.aad-stage.is-audio .aad-char.is-speaking .aad-wing-r {
+  animation: none;
+  transform: rotate(calc(var(--aad-level, 0) * 16deg));
+}
+.aad-stage.is-audio .aad-char.is-speaking .aad-char-frame {
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.35), 0 0 calc(var(--aad-level, 0) * 36px) rgba(255, 255, 255, 0.55);
+}
+.aad-stage.is-audio .aad-bubble {
+  opacity: 0.45;
+}
+.aad-stage.is-audio .aad-bubble.is-playing {
+  opacity: 1;
+}
+.aad-bubble.is-playing .aad-bubble-body {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+.aad-modal button.aad-button.is-speak.is-active {
+  border-color: var(--aad-devil);
+  color: var(--aad-devil);
+}
+
+/* ---------- Footer ---------- */
+
+.aad-notice {
+  min-height: 1.2em;
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.7);
+  padding-left: 18px;
+}
+
+.aad-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 48px;
+  padding-right: 18px;
+}
+
+.aad-modal button.aad-button {
+  height: auto;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 6px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: none;
+}
+.aad-modal button.aad-button.is-secondary {
+  border: 3px solid #fff;
+  background: transparent;
+  color: #fff;
+}
+.aad-modal button.aad-button.is-tertiary {
+  margin-right: auto;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+}
+.aad-modal button.aad-button.is-tertiary:hover {
+  border-color: #fff;
+  color: #fff;
+}
+.aad-modal button.aad-button.is-primary {
+  border: 3px solid var(--aad-ink);
+  background: var(--aad-angel);
+  color: var(--aad-ink);
+  transform: skewX(-6deg) rotate(-2deg);
+  box-shadow: 6px 6px 0 var(--aad-devil);
+}
+.aad-modal button.aad-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+.aad-modal button.aad-button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.aad-statusbar {
+  cursor: pointer;
+}
+
+/* ---------- Mobile (F-4.9) ---------- */
+
+.modal.aad-modal.aad-mobile {
+  width: 100vw;
+  height: 100%;
+}
+.aad-mobile .modal-content,
+.aad-mobile .aad-panel {
+  clip-path: none;
+}
+.modal.aad-modal.aad-mobile::before {
+  display: none;
+}
+.aad-mobile .aad-panel {
+  padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+}
+.aad-mobile .aad-stage {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "angel devil" "log log";
+  gap: 10px;
+}
+.aad-mobile .aad-char.is-lead,
+.aad-mobile .aad-char.is-angel {
+  grid-area: angel;
+}
+.aad-mobile .aad-char.is-counter,
+.aad-mobile .aad-char.is-devil {
+  grid-area: devil;
+}
+.aad-mobile .aad-log {
+  grid-area: log;
+  padding: 12px 4px;
+}
+.aad-mobile .aad-char-frame {
+  width: 96px;
+}
+.aad-mobile .aad-burst {
+  top: 12%;
+  left: 25%;
+}
+.aad-mobile .aad-stage:has(.aad-char.is-counter.is-speaking) .aad-burst,
+.aad-mobile .aad-stage:has(.aad-char.is-devil.is-speaking) .aad-burst {
+  left: 75%;
+}
+.aad-mobile .aad-bubble {
+  max-width: 96%;
+}
+.aad-mobile .aad-actions {
+  padding-right: 0;
+}
+.aad-mobile .aad-actions .aad-button {
+  flex: 1 1 0;
+}
+
+/* ---------- Reduced motion (F-4.7) ---------- */
+
+.aad-no-motion *,
+.aad-no-motion *::before,
+.aad-no-motion *::after {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aad-modal *,
+  .aad-modal *::before,
+  .aad-modal *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ---------- Keyframes ---------- */
+
+@keyframes aad-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes aad-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes aad-burst {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+@keyframes aad-hop {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  40% { transform: translateY(-10px) rotate(-2deg); }
+  70% { transform: translateY(-3px) rotate(1deg); }
+}
+@keyframes aad-think {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+@keyframes aad-flap-l {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-9deg); }
+}
+@keyframes aad-flap-r {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(9deg); }
+}
+@keyframes aad-halo {
+  from { transform: scale(0.94); opacity: 0.75; }
+  to { transform: scale(1.06); opacity: 1; }
+}
+@keyframes aad-pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.03); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes aad-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px) rotate(-0.6deg); }
+  40% { transform: translateX(4px) rotate(0.6deg); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+/* TTS billing confirm: "Don't ask again" */
+.aad-confirm .aad-confirm-dont-ask {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  margin-top: var(--size-4-2);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+/* ---------- Settings: API key note (below the key row) ---------- */
+
+.aad-key-note {
+  margin-top: -0.5em;
+  padding-bottom: 0.75em;
+}
+
+.aad-key-note .aad-key-status {
+  margin-bottom: 0.2em;
+}

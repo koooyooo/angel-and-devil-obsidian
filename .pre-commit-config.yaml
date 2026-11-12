@@ -1,0 +1,32 @@
+# pre-commit hooks for the Angel & Devil Obsidian plugin.
+#   pip install pre-commit   (or: brew install pre-commit)
+#   pre-commit install
+#   pre-commit run --all-files
+#
+# This is a local safety net. The public repository also relies on GitHub secret scanning
+# and push protection, which cannot be skipped.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        # Keep Markdown hard line breaks (two trailing spaces).
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        # Same limit as the deploy script's large-file check.
+        args: [--maxkb=2048]
+      - id: detect-private-key
+
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: v1.9.0
+    hooks:
+      # Builds betterleaks via pre-commit's Go support, so contributors don't need it installed.
+      - id: betterleaks

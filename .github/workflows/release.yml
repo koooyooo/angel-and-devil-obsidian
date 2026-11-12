@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+-*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (defaults to version in manifest.json, e.g. 0.1.0)"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark as pre-release (for BRAT beta testing)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Resolve tag and verify manifest version
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          MANIFEST_VERSION="$(node -p "require('./manifest.json').version")"
+          if [ "$REF_TYPE" = "tag" ]; then
+            TAG="$REF_NAME"
+          elif [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$MANIFEST_VERSION"
+          fi
+
+          # Strip optional leading 'v' if someone pushed v0.1.0, though Obsidian requires bare 0.1.0.
+          if [ "$TAG" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag '$TAG' does not match manifest.json version '$MANIFEST_VERSION' (Obsidian/BRAT requires exact match without leading 'v')"
+            exit 1
+          fi
+
+          for f in main.js manifest.json styles.css; do
+            if [ ! -s "$f" ]; then
+              echo "::error::Required release asset '$f' is missing or empty"
+              exit 1
+            fi
+          done
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease || contains(steps.meta.outputs.tag, '-') }}
+        run: |
+          PRERELEASE_FLAG=""
+          if [ "$PRERELEASE" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          zip -q angel-and-devil.zip main.js manifest.json styles.css
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" main.js manifest.json styles.css angel-and-devil.zip --clobber
+          else
+            # Ensure the tag points to the current commit when triggered via workflow_dispatch
+            if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+              git tag "$TAG" "$GITHUB_SHA"
+              git push origin "$TAG"
+            fi
+            gh release create "$TAG" main.js manifest.json styles.css angel-and-devil.zip \
+              --title "$TAG" \
+              --generate-notes \
+              $PRERELEASE_FLAG
+          fi

@@ -1,6 +1,6 @@
 import { DEFAULT_LINEUP, charName } from "../characters";
 import { detectLanguage } from "../lang";
-import type { PromptMemo } from "../memory";
+import type { NoteKind, PromptMemo } from "../memory";
 import memoryRules from "../prompts/memory.md";
 import rules from "../prompts/rules.md";
 import type { CharacterSpec, Dialogue, Lang, Rounds, SpeakerId } from "../types";
@@ -16,10 +16,11 @@ export interface GenerateInput {
   lineup?: readonly [CharacterSpec, CharacterSpec];
   /**
    * Present only when memory is on: the model then also writes today's memos and updated impressions.
-   * `memos` holds each character's earlier memos (oldest first) and `impressions` their latest overall
-   * impression of the user; both may be empty on the first run.
+   * `kind` says whether the note is a diary entry or other content; `memos` holds each character's earlier
+   * memos about notes of that kind (oldest first) and `impressions` their latest overall impression of the
+   * user; both may be empty on the first run.
    */
-  memory?: { memos: Record<SpeakerId, PromptMemo[]>; impressions?: Record<SpeakerId, PromptMemo> };
+  memory?: { kind?: NoteKind; memos: Record<SpeakerId, PromptMemo[]>; impressions?: Record<SpeakerId, PromptMemo> };
 }
 
 const LANGUAGE_NAME: Record<string, string> = { ja: "Japanese", en: "English" };
@@ -77,23 +78,38 @@ export function buildUserMessage(input: GenerateInput): { message: string; langu
     input.rounds === "auto"
       ? `Turns: ${turnCountFor(2)} or ${turnCountFor(3)} (2 or 3 exchanges, then the ${leadName}'s closing), whichever fits the note.`
       : `Turns: exactly ${turnCountFor(input.rounds)} (${input.rounds} exchanges, then the ${leadName}'s closing).`;
-  const lines = [languageLine, turnsLine, ""];
+  const lines = [languageLine, turnsLine];
+  const kind = input.memory?.kind ?? "diary";
+  if (input.memory) lines.push(`Note kind: ${NOTE_KIND_LINE[kind]}`);
+  lines.push("");
   const memoryBlock = input.memory
-    ? renderMemoryBlock(input.memory.memos, input.lineup ?? DEFAULT_LINEUP, input.memory.impressions)
+    ? renderMemoryBlock(input.memory.memos, input.lineup ?? DEFAULT_LINEUP, input.memory.impressions, kind)
     : "";
   if (memoryBlock) lines.push(memoryBlock, "");
   lines.push("<note>", input.text, "</note>");
   return { language, message: lines.join("\n") };
 }
 
+const NOTE_KIND_LINE: Record<NoteKind, string> = {
+  diary: "diary (the user's own daily note)",
+  content: "content (not a diary entry: an article, book note, study note, idea, plan, …)",
+};
+
+const MEMO_LABEL: Record<NoteKind, string> = {
+  diary: "memos about earlier diary notes",
+  content: "memos about earlier content notes",
+};
+
 /**
  * `<memory>` block for the user message, or "" when neither character has a memo or impression yet.
- * Per character: the current impression of the user first (the big picture), then the dated memos.
+ * Per character: the overall impression of the user first (the big picture, built from both kinds of notes),
+ * then the dated memos about earlier notes of the same `kind` as today's.
  */
 export function renderMemoryBlock(
   memos: Record<SpeakerId, PromptMemo[]>,
   lineup: readonly [CharacterSpec, CharacterSpec],
   impressions: Record<SpeakerId, PromptMemo> = {},
+  kind: NoteKind = "diary",
 ): string {
   const sections: string[] = [];
   for (const c of lineup) {
@@ -104,35 +120,17 @@ export function renderMemoryBlock(
     }
     const list = memos[c.id] ?? [];
     if (list.length > 0) {
-      sections.push(`${name}'s memos (speaker "${c.id}"):`, ...list.map((m) => `- [${m.when}] ${m.text}`), "");
+      sections.push(`${name}'s ${MEMO_LABEL[kind]} (speaker "${c.id}"):`, ...list.map((m) => `- [${m.when}] ${m.text}`), "");
     }
   }
   while (sections.length && sections[sections.length - 1] === "") sections.pop();
   return sections.length ? ["<memory>", ...sections, "</memory>"].join("\n") : "";
 }
 
-/** Gemini 2.5 has no thinkingLevel; this budget is its rough equivalent of "low". */
-export const THINKING_BUDGET_25 = 1024;
-
-/**
- * Banter needs little reasoning, and a thinking model's default (dynamic/high) thinking is most of the
- * wait. Keep it light but not off: "minimal" risks flattening the characters.
- * - Gemini 3 and later (and the -latest aliases): thinkingLevel "low".
- * - Gemini 2.5: a small thinkingBudget.
- * - Older models (1.x / 2.0) do not think, so nothing is sent.
- */
-export function thinkingConfigFor(model: string): Record<string, unknown> | undefined {
-  const m = model.toLowerCase();
-  if (/gemini-(1\.|2\.0)/.test(m)) return undefined;
-  if (/gemini-2\.5/.test(m)) return { thinkingBudget: THINKING_BUDGET_25 };
-  return { thinkingLevel: "low" };
-}
-
 export function buildRequest(input: GenerateInput): { body: unknown; language: Lang } {
   const lineup = input.lineup ?? DEFAULT_LINEUP;
   const memory = input.memory !== undefined;
   const { message, language } = buildUserMessage(input);
-  const thinkingConfig = thinkingConfigFor(input.model);
   return {
     language,
     body: {
@@ -142,7 +140,6 @@ export function buildRequest(input: GenerateInput): { body: unknown; language: L
         responseMimeType: "application/json",
         responseSchema: buildResponseSchema([lineup[0].id, lineup[1].id], { memory }),
         temperature: 1.0,
-        ...(thinkingConfig && { thinkingConfig }),
       },
     },
   };

@@ -109,29 +109,6 @@ describe("TtsService", () => {
     expect(shapes).toEqual(["metadata", "transcript", "transcript", "transcript", "transcript"]);
   });
 
-  it("sends the first chunk alone until the shape is settled, then every chunk at once", async () => {
-    const ok = audioResponse("audio/wav", pcmToWav(new Uint8Array(2), 24000));
-    const pending: Array<() => void> = [];
-    const generateContent = vi.fn(() => new Promise((resolve) => pending.push(() => resolve(ok))));
-    const flush = () => new Promise((r) => setTimeout(r, 0));
-    const tts = new TtsService({ generateContent } as unknown as GeminiClient);
-
-    const first = tts.synthesize(turns, cfg);
-    await flush();
-    expect(generateContent).toHaveBeenCalledTimes(1); // shape unknown: chunk 2 waits for chunk 1
-    pending.shift()!();
-    await flush();
-    expect(generateContent).toHaveBeenCalledTimes(2);
-    pending.shift()!();
-    await first;
-
-    const second = tts.synthesize(turns, cfg);
-    await flush();
-    expect(generateContent).toHaveBeenCalledTimes(4); // shape settled: both chunks already in flight
-    pending.splice(0).forEach((resolve) => resolve());
-    await second;
-  });
-
   it("does not fall back on other errors", async () => {
     const generateContent = vi.fn().mockRejectedValue(new GeminiError("quota", 429));
     await expect(new TtsService({ generateContent } as unknown as GeminiClient).synthesize(turns, cfg)).rejects.toMatchObject({ kind: "quota" });

@@ -48,8 +48,11 @@ Then in Obsidian: **Settings → Community plugins** → turn off **Restricted m
 4. Optional: turn on **Read aloud** in the settings to get a 🔊 button. You are asked before every Gemini TTS call (can be turned off); replaying the same banter uses a local cache and makes no request.
 5. Optional: turn on **Remember banters** in the settings. After every banter (saving is not needed), both characters leave a memo and rewrite their overall impression of you. Later banters build on them: the pair can refer back, and avoids repeating a point it has already made. Another banter on the same note on the same day (for example **Again**) replaces that day's record. Everything is kept as ordinary notes in a vault folder (default `_angel_and_devil/`, configurable):
    - `history.md`: one line per note and day, with a link to the note.
-   - `angel_memo.md` / `devil_memo.md`: each character's memos (what happened, what they said, what to check next); only the latest 10 are kept. Edit or delete them freely.
-   - `angel_impression.md` / `devil_impression.md`: each character's overall impression of you, rewritten after every banter; the latest 3 versions are kept and the bottom one is used. Edit it to correct them (for example, "the empty task section is just my template").
+   - `angel_memo_diary.md` / `devil_memo_diary.md`: each character's memos about diary notes (what happened, what they said, what to check next); only the latest 10 are kept. Edit or delete them freely.
+   - `angel_memo_content.md` / `devil_memo_content.md`: the same for other notes — articles, book notes, ideas (what the note was about, what it shows about your interests, what they said); the latest 10.
+   - `angel_impression.md` / `devil_impression.md`: each character's overall impression of you, built from both kinds of notes in two aspects (life & habits, interests & thinking) and rewritten after every banter; the latest 3 versions are kept and the bottom one is used. Edit it to correct them (for example, "the empty task section is just my template").
+
+   A banter uses the memos of its own kind only, so articles do not push your diary memos out; the impression is shared, so the pair can connect your day to what you have been reading, and the other way around. There is nothing to set up: a note counts as a diary entry when it matches the folder and date format of Obsidian's core **Daily notes** plugin, or, if Daily notes is turned off or not set up, when its file name starts with a date (`2026-11-12.md`, `2026-11-12 Thursday.md`). Set the property `angel-and-devil-kind` to `diary` or `content` to decide for a single note. Memos from earlier versions (`angel_memo.md`) are renamed to the diary memos automatically.
 
 ## Network use and privacy
 
@@ -57,7 +60,7 @@ Then in Obsidian: **Settings → Community plugins** → turn off **Restricted m
 - Frontmatter and previously saved banter blocks are removed before sending.
 - There is no server of our own and no telemetry.
 - The API key is stored in **SecretStorage**, Obsidian's standard place for plugin secrets (Obsidian 1.11.4+; older versions use this plugin's `data.json` in plain text). Other installed plugins can still read it. Details: [docs/api-key.md](docs/api-key.md).
-- Memory (off by default) also sends each character's latest memos (up to 10 each) and current impression with the note. `history.md` is never sent. Memos and impressions are written as soon as a banter is shown.
+- Memory (off by default) also sends each character's latest memos about notes of the same kind (up to 10 each) and current impression with the note. `history.md` is never sent. Memos and impressions are written as soon as a banter is shown.
 - Read aloud (off by default) sends the generated banter text to Gemini TTS. Audio is kept in memory only.
 - Gemini API usage — especially TTS — may be billed to your Google account.
 - Use a **dedicated** API key with a **spend cap** — see [Recommended key hygiene](docs/api-key.md#recommended-key-hygiene).

@@ -3,9 +3,15 @@
  *
  * Everything lives in plain notes inside the vault, so the user can read, fix, or delete it:
  *   <folder>/history.md          one line per note and day, with a link to the note (never sent to Gemini)
- *   <folder>/<speakerId>_memo.md  each character's own memos; only the last MEMORY_ENTRIES are kept and sent
- *   <folder>/<speakerId>_impression.md  each character's overall impression of the user, rewritten after every
- *                                banter; the last IMPRESSION_VERSIONS versions are kept, only the newest is sent
+ *   <folder>/<speakerId>_memo_diary.md    each character's memos about diary notes
+ *   <folder>/<speakerId>_memo_content.md  each character's memos about other notes (articles, book notes, …)
+ *                                only the last MEMORY_ENTRIES of each are kept; a banter reads and writes the
+ *                                memos of its own kind only (see isDiaryNote)
+ *   <folder>/<speakerId>_impression.md  each character's overall impression of the user, read and rewritten
+ *                                after every banter of either kind; the last IMPRESSION_VERSIONS versions are
+ *                                kept, only the newest is sent
+ *
+ * Memos used to live in <speakerId>_memo.md; that file is taken over as the diary memos (memory-store.ts).
  *
  * A banter is recorded as soon as it is shown. Another banter on the same note on the same day ("Again",
  * or a second run) replaces that day's record instead of adding to it.
@@ -16,8 +22,12 @@ import type { SpeakerId } from "./types";
 
 export const DEFAULT_MEMORY_FOLDER = "_angel_and_devil";
 export const HISTORY_FILE = "history.md";
-/** Memos kept per character (and sent back to the model). */
+/** Memos kept per character and kind of note (and sent back to the model). */
 export const MEMORY_ENTRIES = 10;
+
+/** What a note is, for memory: a diary entry, or anything else (an article, book note, spec, …). */
+export type NoteKind = "diary" | "content";
+export const NOTE_KINDS: readonly NoteKind[] = ["diary", "content"];
 /** A memo is cut to this length before it is sent, so one entry cannot eat the budget. */
 export const MAX_MEMO_CHARS = 600;
 /** Impression versions kept per character (older ones only help the user see how it changed). */
@@ -25,7 +35,12 @@ export const IMPRESSION_VERSIONS = 3;
 /** An impression is cut to this length before it is sent. */
 export const MAX_IMPRESSION_CHARS = 1200;
 
-export function memoFileName(id: SpeakerId): string {
+export function memoFileName(id: SpeakerId, kind: NoteKind): string {
+  return `${id}_memo_${kind}.md`;
+}
+
+/** Where memos were kept before they were split by kind; taken over as the diary memos. */
+export function legacyMemoFileName(id: SpeakerId): string {
   return `${id}_memo.md`;
 }
 
@@ -50,6 +65,83 @@ export function normalizeMemoryFolder(input: string): string | null {
 
 export function isInFolder(path: string, folder: string): boolean {
   return path === folder || path.startsWith(`${folder}/`);
+}
+
+/** Frontmatter key that sets a note's kind (`diary` or `content`), whatever the other rules say. */
+export const KIND_FRONTMATTER_KEY = "angel-and-devil-kind";
+
+/** A file name that starts with a calendar date: `2026-11-12`, `2026-11-12 Thursday`, `2026-11-12_work`. */
+const DATED_NAME = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?!\d)/;
+
+export interface DiaryCheck {
+  /** Vault-relative path, e.g. `Daily/2026-11-12.md`. */
+  path: string;
+  /** File name without the extension. */
+  basename: string;
+  frontmatter?: Record<string, unknown> | null;
+}
+
+/** Obsidian's core Daily notes settings (`<configDir>/daily-notes.json`), as saved: either may be missing or empty. */
+export interface DailyNoteSettings {
+  folder?: string;
+  format?: string;
+}
+
+/** Obsidian's own default for the Daily notes date format. */
+export const DEFAULT_DAILY_NOTE_FORMAT = "YYYY-MM-DD";
+
+/** Strict date parsing (moment in the plugin): does `text` read as a date in `format`, with nothing left over? */
+export type DateFormatMatcher = (text: string, format: string) => boolean;
+
+/**
+ * Cleans the raw Daily notes settings. Returns null when there is nothing to go by (the core plugin is off, the
+ * file is missing, or both folder and format were left empty), so the dated-file-name rule is used instead.
+ */
+export function dailyNoteRule(raw: unknown): { folder: string; format: string } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as DailyNoteSettings;
+  const folder = typeof r.folder === "string" ? r.folder.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "").trim() : "";
+  const format = typeof r.format === "string" ? r.format.trim() : "";
+  if (!folder && !format) return null;
+  return { folder, format: format || DEFAULT_DAILY_NOTE_FORMAT };
+}
+
+function frontmatterKind(value: unknown): NoteKind | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim().toLowerCase();
+  return v === "diary" || v === "content" ? v : null;
+}
+
+/** A note's kind: a diary entry (isDiaryNote), or content. */
+export function noteKind(
+  note: DiaryCheck,
+  daily: { folder: string; format: string } | null,
+  matchesFormat: DateFormatMatcher,
+): NoteKind {
+  return isDiaryNote(note, daily, matchesFormat) ? "diary" : "content";
+}
+
+/**
+ * Whether a note is a diary entry. Diary notes and other notes keep separate memos, so articles or book notes
+ * do not push diary memos out (the impression of the user is shared).
+ *
+ * First match wins:
+ * 1. the frontmatter kind (`angel-and-devil-kind: diary | content`);
+ * 2. with Obsidian's Daily notes settings (`daily`): the note is in its folder and its path below that folder,
+ *    without `.md`, reads strictly as a date in its format (a format may contain `/` for subfolders);
+ * 3. without them: the file name starts with `YYYY-MM-DD`.
+ */
+export function isDiaryNote(
+  note: DiaryCheck,
+  daily: { folder: string; format: string } | null,
+  matchesFormat: DateFormatMatcher,
+): boolean {
+  const kind = frontmatterKind(note.frontmatter?.[KIND_FRONTMATTER_KEY]);
+  if (kind !== null) return kind === "diary";
+  if (!daily) return DATED_NAME.test(note.basename);
+  if (daily.folder && !note.path.startsWith(`${daily.folder}/`)) return false;
+  const relative = (daily.folder ? note.path.slice(daily.folder.length + 1) : note.path).replace(/\.md$/i, "");
+  return matchesFormat(relative, daily.format);
 }
 
 function pad(n: number): string {

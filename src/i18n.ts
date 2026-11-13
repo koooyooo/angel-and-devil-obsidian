@@ -1,4 +1,5 @@
 import { getLanguage } from "obsidian";
+import type { NoteKind } from "./memory";
 
 const ja = {
   pluginName: "天使と悪魔",
@@ -103,16 +104,17 @@ const ja = {
   setMemoryHeading: "記憶",
   setMemoryEnabled: "掛け合いを記憶する",
   setMemoryEnabledDesc:
-    "掛け合いのたびに（保存しなくても）、2人がそれぞれメモを残し、あなたへの全体的な印象も書き直します。次からは印象と直近のメモを踏まえて、同じ指摘を繰り返さずに話します。同じノートを同じ日にもう一度掛け合うと、その日の分は新しい内容で置き換わります。どちらも Vault 内のフォルダに普通のノートとして残るので、読んだり直したり消したりできます。オンの間は、メモと印象の内容もノートと一緒に Gemini API に送られます。",
+    "掛け合いのたびに（保存しなくても）、2人がそれぞれメモを残し、あなたへの全体的な印象も書き直します。次からは印象と直近のメモを踏まえて、同じ指摘を繰り返さずに話します。メモは日記とそれ以外のノート（記事・読書メモなど）で分けて残し、それぞれ同じ種類のメモだけを使います。印象は両方から作る 1 つです。日記として扱うのは、コアプラグイン「デイリーノート」のフォルダと日付の書式に合うノートです（デイリーノートが未設定なら、ファイル名が 2026-11-12 のような日付で始まるノート）。個別のノートは、プロパティ angel-and-devil-kind を diary / content にして決められます。同じノートを同じ日にもう一度掛け合うと、その日の分は新しい内容で置き換わります。どれも Vault 内のフォルダに普通のノートとして残るので、読んだり直したり消したりできます。オンの間は、メモと印象の内容もノートと一緒に Gemini API に送られます。",
   setMemoryFolder: "記憶フォルダ",
   setMemoryFolderDesc:
-    "history.md と、キャラクターごとのメモ（angel_memo.md など）・印象（angel_impression.md など）を置くフォルダ。「.」で始まるフォルダは Obsidian から見えないため使えません。",
+    "history.md と、キャラクターごとのメモ（angel_memo_diary.md / angel_memo_content.md など）・印象（angel_impression.md など）を置くフォルダ。「.」で始まるフォルダは Obsidian から見えないため使えません。",
   setMemoryFolderInvalid: "このフォルダ名は使えません。「.」で始まる名前や、* \" < > : | ? を含む名前は指定できません。",
   memoryWriteFailed: "記憶の書き込みに失敗しました。",
   memoryUsed: (n: number) => `過去のメモ ${n} 件も踏まえて話しています。`,
-  memoTitle: (emoji: string, name: string) => `# ${emoji} ${name}のメモ`,
-  memoNote: (max: number) =>
-    `%% 天使と悪魔の記憶です。掛け合いのたびに下へ追加され（同じノート・同じ日の分は置き換え）、直近 ${max} 件だけが残ります。自由に直したり消したりできます。 %%`,
+  memoTitle: (emoji: string, name: string, kind: NoteKind) =>
+    `# ${emoji} ${name}のメモ（${kind === "diary" ? "日記" : "コンテンツ"}）`,
+  memoNote: (max: number, kind: NoteKind) =>
+    `%% 天使と悪魔の記憶です。${kind === "diary" ? "日記" : "日記以外のノート（記事・読書メモなど）"}の掛け合いのたびに下へ追加され（同じノート・同じ日の分は置き換え）、直近 ${max} 件だけが残ります。自由に直したり消したりできます。 %%`,
   impressionTitle: (emoji: string, name: string) => `# ${emoji} ${name}から見たあなた`,
   impressionNote: (max: number) =>
     `%% 天使と悪魔の記憶です。掛け合いのたびに、前回の印象と今日のノートから書き直した版が下へ追加され（同じノート・同じ日の分は置き換え）、直近 ${max} 版だけが残ります。次の掛け合いで使われるのは一番下の版です。自由に直せます。 %%`,
@@ -222,16 +224,17 @@ const en: Strings = {
   setMemoryHeading: "Memory",
   setMemoryEnabled: "Remember banters",
   setMemoryEnabledDesc:
-    "After every banter (no need to save it), both characters leave a memo and rewrite their overall impression of you. Later banters build on the impression and the latest memos, so the pair does not keep repeating the same point. Another banter on the same note on the same day replaces that day's entries. Both are ordinary notes in a vault folder, so you can read, edit, or delete them. While this is on, the memos and impressions are sent to the Gemini API together with your note.",
+    "After every banter (no need to save it), both characters leave a memo and rewrite their overall impression of you. Later banters build on the impression and the latest memos, so the pair does not keep repeating the same point. Memos are kept apart for diary notes and for other notes (articles, book notes, …), and a banter uses the memos of its own kind; the impression is one, built from both. Diary notes are those that match the folder and date format of the core Daily notes plugin (or, if Daily notes is not set up, notes whose file name starts with a date such as 2026-11-12). For a single note, set the property angel-and-devil-kind to diary or content. Another banter on the same note on the same day replaces that day's entries. All are ordinary notes in a vault folder, so you can read, edit, or delete them. While this is on, the memos and impressions are sent to the Gemini API together with your note.",
   setMemoryFolder: "Memory folder",
   setMemoryFolderDesc:
-    "Folder for history.md and each character's memos (angel_memo.md and so on) and impressions (angel_impression.md and so on). Folders starting with \".\" cannot be used because Obsidian hides them.",
+    "Folder for history.md and each character's memos (angel_memo_diary.md / angel_memo_content.md and so on) and impressions (angel_impression.md and so on). Folders starting with \".\" cannot be used because Obsidian hides them.",
   setMemoryFolderInvalid: "This folder name cannot be used. Names starting with \".\" or containing * \" < > : | ? are not allowed.",
   memoryWriteFailed: "The memory could not be written.",
   memoryUsed: (n: number) => `Also drawing on ${n} earlier ${n === 1 ? "memo" : "memos"}.`,
-  memoTitle: (emoji: string, name: string) => `# ${emoji} ${name}'s memos`,
-  memoNote: (max: number) =>
-    `%% Angel & Devil memory. A memo is added at the bottom after every banter (replacing the same note's memo from the same day); only the latest ${max} are kept. Edit or delete them freely. %%`,
+  memoTitle: (emoji: string, name: string, kind: NoteKind) =>
+    `# ${emoji} ${name}'s memos (${kind === "diary" ? "diary" : "content"})`,
+  memoNote: (max: number, kind: NoteKind) =>
+    `%% Angel & Devil memory. A memo is added at the bottom after every banter on ${kind === "diary" ? "a diary note" : "a note that is not a diary entry (an article, book note, …)"} (replacing the same note's memo from the same day); only the latest ${max} are kept. Edit or delete them freely. %%`,
   impressionTitle: (emoji: string, name: string) => `# ${emoji} You, as ${name} sees you`,
   impressionNote: (max: number) =>
     `%% Angel & Devil memory. After every banter, a version rewritten from the previous impression and today's note is added at the bottom (replacing the same note's version from the same day); only the latest ${max} are kept. The next banter uses the bottom one. Edit it freely. %%`,

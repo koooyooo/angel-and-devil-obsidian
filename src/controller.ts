@@ -8,7 +8,7 @@ import { MAX_TURNS, MIN_TURNS } from "./gemini/schema";
 import { t } from "./i18n";
 import { prepareInput } from "./input";
 import type AngelDevilPlugin from "./main";
-import type { LoadedMemory } from "./memory-store";
+import type { LoadedMemory, MemoryUse } from "./memory-store";
 import type { CharacterSpec, Dialogue } from "./types";
 import { confirmTts } from "./ui/confirm";
 import { DialogueModal } from "./ui/modal";
@@ -28,8 +28,8 @@ interface DialogueSession {
   input: string;
   truncated: boolean;
   lineup: readonly [CharacterSpec, CharacterSpec];
-  /** Memory folder for this banter, or null when memory is off (or the note is inside that folder). */
-  memoryFolder: string | null;
+  /** Memory folder and note kind for this banter, or null when memory is off (or the note is inside that folder). */
+  memory: MemoryUse | null;
   dialogue?: Dialogue;
   saved: boolean;
   /** WAV for the current dialogue (F-6.7). Cleared on regenerate. */
@@ -83,6 +83,10 @@ export class DialogueController {
     if (mode === "voice" && !(await this.approveVoice(`${MIN_TURNS}–${MAX_TURNS}`))) return;
 
     const lineup = resolveLineup(this.plugin.settings.lineup);
+    const memoryUse = await this.plugin.memory.useFor(file).catch((e: unknown) => {
+      console.warn("[angel-and-devil] could not decide whether to use memory", e);
+      return null;
+    });
     this.session = {
       id: 0,
       mode,
@@ -90,7 +94,7 @@ export class DialogueController {
       input: prepared.text,
       truncated: prepared.truncated,
       lineup,
-      memoryFolder: this.plugin.memory.folderFor(file),
+      memory: memoryUse,
       saved: false,
     };
     this.modal = new DialogueModal(
@@ -138,9 +142,9 @@ export class DialogueController {
 
     const s = this.plugin.settings;
     let memory: LoadedMemory | undefined;
-    if (session.memoryFolder) {
+    if (session.memory) {
       try {
-        memory = await this.plugin.memory.load(session.memoryFolder, session.sourceFile, session.lineup);
+        memory = await this.plugin.memory.load(session.memory, session.sourceFile, session.lineup);
       } catch (e) {
         // Unreadable memory should not block the banter: go on without earlier memos.
         console.warn("[angel-and-devil] could not read memory", e);
@@ -156,7 +160,10 @@ export class DialogueController {
         rounds: s.rounds,
         model: s.textModel,
         lineup: session.lineup,
-        memory: memory && { memos: memory.memos, impressions: memory.impressions },
+        memory:
+          memory && session.memory
+            ? { kind: session.memory.kind, memos: memory.memos, impressions: memory.impressions }
+            : undefined,
       });
     } catch (e) {
       if (this.session?.id !== id) return;
@@ -317,12 +324,12 @@ export class DialogueController {
    * so a quick "Again" replaces the earlier record instead of racing it.
    */
   private recordMemory(session: DialogueSession, dialogue: Dialogue): void {
-    const folder = session.memoryFolder;
+    const use = session.memory;
     const memory = dialogue.memory;
-    if (!folder || !memory) return;
+    if (!use || !memory) return;
     const now = new Date();
     this.memoryWrites = this.memoryWrites
-      .then(() => this.plugin.memory.record(folder, session.sourceFile, session.lineup, memory, now))
+      .then(() => this.plugin.memory.record(use, session.sourceFile, session.lineup, memory, now))
       .catch((e) => {
         console.warn("[angel-and-devil] could not write memory", e);
         new Notice(t.memoryWriteFailed);

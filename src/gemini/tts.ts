@@ -132,8 +132,6 @@ export function extractAudio(body: unknown): { mimeType?: string; data: Uint8Arr
 export class TtsService {
   /** Remembered after the first fallback so later calls go straight to the shape that works. */
   private shape: TtsRequestShape = "metadata";
-  /** True once a request in `shape` has succeeded; from then on every chunk goes out at once. */
-  private shapeSettled = false;
 
   constructor(private readonly client: GeminiClient) {}
 
@@ -144,11 +142,7 @@ export class TtsService {
   ): Promise<Uint8Array> {
     const chunks = chunkTurns(turns);
     if (chunks.length === 0) throw new GeminiError("bad_output");
-    if (this.shapeSettled) {
-      const clips = await Promise.all(chunks.map((chunk) => this.synthesizeChunk(chunk, cfg, lineup)));
-      return concatPcmToWav(clips, TTS_CHUNK_GAP_MS);
-    }
-    // Shape not known yet: the first chunk settles it (and its 400 fallback) before the rest go out in parallel.
+    // The first chunk settles the request shape (and its 400 fallback) before the rest go out in parallel.
     const first = await this.synthesizeChunk(chunks[0], cfg, lineup);
     const rest = await Promise.all(chunks.slice(1).map((chunk) => this.synthesizeChunk(chunk, cfg, lineup)));
     return concatPcmToWav([first, ...rest], TTS_CHUNK_GAP_MS);
@@ -168,7 +162,6 @@ export class TtsService {
       this.shape = "transcript";
       body = await this.client.generateContent(cfg.model, buildTtsRequest(turns, cfg, this.shape, lineup), TTS_TIMEOUT_MS);
     }
-    this.shapeSettled = true;
     const audio = extractAudio(body);
     return extractPcm(audio.data, audio.mimeType);
   }

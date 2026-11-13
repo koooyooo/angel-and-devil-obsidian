@@ -1,3 +1,4 @@
+import moment from "moment";
 import { describe, expect, it } from "vitest";
 import { buildRequest, buildSystemPrompt, buildUserMessage, renderMemoryBlock } from "../src/gemini/generator";
 import { buildResponseSchema, parseDialogue } from "../src/gemini/schema";
@@ -8,12 +9,17 @@ import {
   MAX_MEMO_CHARS,
   appendHistoryLine,
   appendMemoEntry,
+  dailyNoteRule,
   formatStamp,
   headingAsText,
+  isDiaryNote,
   isInFolder,
   isSameNoteSameDay,
+  legacyMemoFileName,
   linkTarget,
+  memoFileName,
   normalizeMemoryFolder,
+  noteKind,
   parseMemo,
   removeMemoEntries,
   toPromptImpression,
@@ -162,8 +168,36 @@ describe("memory in the request", () => {
     expect(buildSystemPrompt(DEFAULT_LINEUP, { memory: true })).toContain("`\"devil\"`: Devil's memo about today");
 
     const { message } = buildUserMessage(input);
-    expect(message).toContain('<memory>\nAngel\'s memos (speaker "angel"):\n- [2026-11-11 21:00 2026-11-11] Started running.\n</memory>');
+    expect(message).toContain(
+      '<memory>\nAngel\'s memos about earlier diary notes (speaker "angel"):\n- [2026-11-11 21:00 2026-11-11] Started running.\n</memory>',
+    );
+    expect(message).toContain("Note kind: diary");
     expect(message.indexOf("</memory>")).toBeLessThan(message.indexOf("<note>"));
+  });
+
+  it("tells the model the note kind and labels the memos by it", () => {
+    const memos = { angel: [{ when: "w", text: "Read about Rust ownership." }] };
+    const { message } = buildUserMessage({
+      text: "Rust の所有権について",
+      language: "auto",
+      rounds: 2,
+      model: "m",
+      memory: { kind: "content", memos },
+    });
+    expect(message).toContain("Note kind: content");
+    expect(message).toContain('Angel\'s memos about earlier content notes (speaker "angel"):');
+    expect(message).not.toContain("diary notes");
+  });
+
+  it("leaves out the note kind when memory is off", () => {
+    const { message } = buildUserMessage({ text: "今日は早起きした", language: "auto", rounds: 2, model: "m" });
+    expect(message).not.toContain("Note kind");
+  });
+
+  it("asks for an impression in two aspects, revising mainly the one today's note speaks to", () => {
+    const prompt = buildSystemPrompt(DEFAULT_LINEUP, { memory: true });
+    expect(prompt).toContain("`生活・習慣:` / `関心・考え方:`");
+    expect(prompt).toContain("Revise mainly the aspect that today's note speaks to");
   });
 
   it("puts each character's impression before their memos", () => {
@@ -178,7 +212,7 @@ describe("memory in the request", () => {
         'Devil\'s impression of the user (speaker "devil", as of 2026-11-12 21:00 2026-11-12):',
         "- Leaves the task list empty every day: just their format.",
         "",
-        'Devil\'s memos (speaker "devil"):',
+        'Devil\'s memos about earlier diary notes (speaker "devil"):',
         "- [2026-11-12 21:00 2026-11-12] Promised to study statistics.",
         "</memory>",
       ].join("\n"),
@@ -240,7 +274,96 @@ describe("memory settings", () => {
     expect(mergeSettings({}).memory).toEqual({ enabled: false, folder: DEFAULT_MEMORY_FOLDER });
   });
   it("keeps a valid folder and falls back from a dot folder", () => {
-    expect(mergeSettings({ memory: { enabled: true, folder: "Journal/aad" } }).memory).toEqual({ enabled: true, folder: "Journal/aad" });
+    expect(mergeSettings({ memory: { enabled: true, folder: "Journal/aad" } }).memory).toEqual({
+      enabled: true,
+      folder: "Journal/aad",
+    });
     expect(mergeSettings({ memory: { enabled: true, folder: ".aad" } }).memory.folder).toBe(DEFAULT_MEMORY_FOLDER);
+  });
+});
+
+describe("dailyNoteRule", () => {
+  it("returns null when there is nothing to go by", () => {
+    expect(dailyNoteRule(null)).toBeNull();
+    expect(dailyNoteRule("x")).toBeNull();
+    expect(dailyNoteRule({})).toBeNull();
+    expect(dailyNoteRule({ folder: " ", format: "" })).toBeNull();
+  });
+  it("cleans the folder and fills in Obsidian's default format", () => {
+    expect(dailyNoteRule({ folder: "/Journal/Daily/" })).toEqual({ folder: "Journal/Daily", format: "YYYY-MM-DD" });
+    expect(dailyNoteRule({ format: "YYYY年MM月DD日" })).toEqual({ folder: "", format: "YYYY年MM月DD日" });
+  });
+});
+
+describe("isDiaryNote", () => {
+  const note = (path: string, frontmatter?: Record<string, unknown>) => ({
+    path,
+    basename: path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, ""),
+    frontmatter,
+  });
+  const strict = (text: string, format: string) => moment(text, format, true).isValid();
+  const check = (n: ReturnType<typeof note>, daily: { folder: string; format: string } | null = null) =>
+    isDiaryNote(n, daily, strict);
+
+  describe("without Daily notes settings", () => {
+    it("treats a dated file name as a diary entry, wherever it is", () => {
+      expect(check(note("2026-11-12.md"))).toBe(true);
+      expect(check(note("Journal/2026/2026-11-12 Thursday.md"))).toBe(true);
+      expect(check(note("2026-11-12_work.md"))).toBe(true);
+    });
+    it("does not treat other names as diary entries", () => {
+      expect(check(note("Articles/Rust ownership.md"))).toBe(false);
+      expect(check(note("2026-13-01.md"))).toBe(false);
+      expect(check(note("2026-11-123.md"))).toBe(false);
+      expect(check(note("Notes from 2026-11-12.md"))).toBe(false);
+    });
+  });
+
+  describe("with Daily notes settings", () => {
+    const daily = { folder: "Daily", format: "YYYY-MM-DD" };
+    it("needs both the folder and the date format", () => {
+      expect(check(note("Daily/2026-11-12.md"), daily)).toBe(true);
+      expect(check(note("Daily/Thursday.md"), daily)).toBe(false);
+      expect(check(note("Daily/2026-11-12 Thursday.md"), daily)).toBe(false);
+      expect(check(note("Archive/2026-11-12.md"), daily)).toBe(false);
+      expect(check(note("Daily-old/2026-11-12.md"), daily)).toBe(false);
+    });
+    it("uses the vault root when the folder is empty, without matching every note there", () => {
+      const root = { folder: "", format: "YYYY-MM-DD" };
+      expect(check(note("2026-11-12.md"), root)).toBe(true);
+      expect(check(note("Ideas.md"), root)).toBe(false);
+      expect(check(note("Journal/2026-11-12.md"), root)).toBe(false);
+    });
+    it("follows a custom format, including subfolders in the format", () => {
+      expect(check(note("Daily/2026年11月12日.md"), { folder: "Daily", format: "YYYY年MM月DD日" })).toBe(true);
+      const nested = { folder: "Journal", format: "YYYY/MM/YYYY-MM-DD" };
+      expect(check(note("Journal/2026/11/2026-11-12.md"), nested)).toBe(true);
+      expect(check(note("Journal/2026-11-12.md"), nested)).toBe(false);
+    });
+  });
+
+  it("lets the frontmatter kind override the other rules", () => {
+    const daily = { folder: "Daily", format: "YYYY-MM-DD" };
+    expect(check(note("Articles/Rust ownership.md", { "angel-and-devil-kind": "diary" }))).toBe(true);
+    expect(check(note("2026-11-12.md", { "angel-and-devil-kind": "content" }))).toBe(false);
+    expect(check(note("Daily/2026-11-12.md", { "angel-and-devil-kind": "content" }), daily)).toBe(false);
+    expect(check(note("Articles/x.md", { "angel-and-devil-kind": " Diary " }), daily)).toBe(true);
+  });
+  it("ignores a kind that is not diary or content", () => {
+    expect(check(note("2026-11-12.md", { "angel-and-devil-kind": "maybe" }))).toBe(true);
+    expect(check(note("Articles/x.md", { "angel-and-devil-kind": true }))).toBe(false);
+    expect(check(note("Articles/x.md", null as unknown as Record<string, unknown>))).toBe(false);
+  });
+  it("gives the note kind for memory", () => {
+    expect(noteKind(note("2026-11-12.md"), null, strict)).toBe("diary");
+    expect(noteKind(note("Articles/x.md"), null, strict)).toBe("content");
+  });
+});
+
+describe("memo file names", () => {
+  it("keeps diary and content memos apart and knows the old single file", () => {
+    expect(memoFileName("angel", "diary")).toBe("angel_memo_diary.md");
+    expect(memoFileName("devil", "content")).toBe("devil_memo_content.md");
+    expect(legacyMemoFileName("angel")).toBe("angel_memo.md");
   });
 });

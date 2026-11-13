@@ -1,13 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GeminiClient } from "../src/gemini/client";
 import { GeminiError, extractText, mapHttpError } from "../src/gemini/errors";
-import {
-  DialogueGenerator,
-  THINKING_BUDGET_25,
-  buildRequest,
-  buildUserMessage,
-  thinkingConfigFor,
-} from "../src/gemini/generator";
+import { DialogueGenerator, buildRequest, buildUserMessage } from "../src/gemini/generator";
 
 describe("mapHttpError", () => {
   it.each([
@@ -68,15 +62,6 @@ describe("buildRequest", () => {
     const b = body as { generationConfig: { responseMimeType: string; responseSchema: unknown } };
     expect(b.generationConfig.responseMimeType).toBe("application/json");
     expect(b.generationConfig.responseSchema).toBeTruthy();
-  });
-  it("keeps thinking light: thinkingLevel low for Gemini 3+/latest, a budget for 2.5, nothing for older", () => {
-    const cfgFor = (model: string) =>
-      (buildRequest({ text: "hello world", language: "auto", rounds: 3, model }).body as any).generationConfig.thinkingConfig;
-    expect(cfgFor("gemini-flash-latest")).toEqual({ thinkingLevel: "low" });
-    expect(cfgFor("gemini-3-flash-preview")).toEqual({ thinkingLevel: "low" });
-    expect(cfgFor("gemini-2.5-flash")).toEqual({ thinkingBudget: THINKING_BUDGET_25 });
-    expect(cfgFor("gemini-2.0-flash")).toBeUndefined();
-    expect(thinkingConfigFor("gemini-1.5-pro")).toBeUndefined();
   });
 });
 

@@ -214,8 +214,7 @@ export class DialogueModal extends Modal {
     this.stageEl.removeClass("is-loading");
     const notices: string[] = [];
     if (options.truncated) notices.push(t.truncated);
-    if (options.memoryCount) notices.push(t.memoryUsed(options.memoryCount));
-    this.noticeEl.setText(notices.join(" "));
+    if (options.memoryCount) notices.push(t.memoryUsed(options.memoryCount));    this.noticeEl.setText(notices.join(" "));
     this.renderActions();
     if (options.reveal === "audio") return; // bubbles follow setActiveTurn()
     if (this.motion) this.revealNext();

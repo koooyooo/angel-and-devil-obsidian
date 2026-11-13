@@ -4,6 +4,7 @@ import { buildResponseSchema, parseDialogue } from "../src/gemini/schema";
 import { DEFAULT_LINEUP } from "../src/characters";
 import {
   DEFAULT_MEMORY_FOLDER,
+  MAX_IMPRESSION_CHARS,
   MAX_MEMO_CHARS,
   appendHistoryLine,
   appendMemoEntry,
@@ -15,6 +16,7 @@ import {
   normalizeMemoryFolder,
   parseMemo,
   removeMemoEntries,
+  toPromptImpression,
   toPromptMemo,
 } from "../src/memory";
 import { mergeSettings } from "../src/settings";
@@ -122,9 +124,16 @@ describe("links in headings", () => {
   });
 
   it("flattens and caps a memo for the prompt", () => {
-    const memo = toPromptMemo({ heading: "h", body: `a\n\nb ${"x".repeat(400)}` });
+    const memo = toPromptMemo({ heading: "h", body: `a\n\nb ${"x".repeat(MAX_MEMO_CHARS)}` });
     expect(memo.text.startsWith("a b x")).toBe(true);
     expect(memo.text.length).toBe(MAX_MEMO_CHARS + 1);
+  });
+
+  it("keeps an impression's lines but drops blank ones, and caps it", () => {
+    const impression = toPromptImpression({ heading: "2026-11-13 19:22 [[2026-11-13]]", body: "- one  \n\n  - two\n" });
+    expect(impression).toEqual({ when: "2026-11-13 19:22 2026-11-13", text: "- one\n- two" });
+    const long = toPromptImpression({ heading: "h", body: "y".repeat(MAX_IMPRESSION_CHARS + 50) });
+    expect(long.text.length).toBe(MAX_IMPRESSION_CHARS + 1);
   });
 });
 
@@ -144,12 +153,52 @@ describe("memory in the request", () => {
       body: { generationConfig: { responseSchema: { required: string[]; properties: { memory: { required: string[] } } } } };
     };
     expect(body.generationConfig.responseSchema.required).toContain("memory");
-    expect(body.generationConfig.responseSchema.properties.memory.required).toEqual(["summary", "angel", "devil"]);
-    expect(buildSystemPrompt(DEFAULT_LINEUP, { memory: true })).toContain('`"devil"`: what Devil wants to remember');
+    expect(body.generationConfig.responseSchema.properties.memory.required).toEqual([
+      "summary",
+      "angel",
+      "devil",
+      "impressions",
+    ]);
+    expect(buildSystemPrompt(DEFAULT_LINEUP, { memory: true })).toContain("`\"devil\"`: Devil's memo about today");
 
     const { message } = buildUserMessage(input);
     expect(message).toContain('<memory>\nAngel\'s memos (speaker "angel"):\n- [2026-11-11 21:00 2026-11-11] Started running.\n</memory>');
     expect(message.indexOf("</memory>")).toBeLessThan(message.indexOf("<note>"));
+  });
+
+  it("puts each character's impression before their memos", () => {
+    const block = renderMemoryBlock(
+      { devil: [{ when: "2026-11-12 21:00 2026-11-12", text: "Promised to study statistics." }] },
+      DEFAULT_LINEUP,
+      { devil: { when: "2026-11-12 21:00 2026-11-12", text: "- Leaves the task list empty every day: just their format." } },
+    );
+    expect(block).toBe(
+      [
+        "<memory>",
+        'Devil\'s impression of the user (speaker "devil", as of 2026-11-12 21:00 2026-11-12):',
+        "- Leaves the task list empty every day: just their format.",
+        "",
+        'Devil\'s memos (speaker "devil"):',
+        "- [2026-11-12 21:00 2026-11-12] Promised to study statistics.",
+        "</memory>",
+      ].join("\n"),
+    );
+    expect(renderMemoryBlock({}, DEFAULT_LINEUP, { angel: { when: "w", text: "- kind" } })).toContain("Angel's impression");
+  });
+
+  it("tells the model not to repeat points or nitpick the note's format", () => {
+    const prompt = buildSystemPrompt(DEFAULT_LINEUP, { memory: true });
+    expect(prompt).toContain("already made");
+    expect(prompt).toContain("`impressions`");
+    expect(prompt).not.toContain("{{");
+  });
+
+  it("asks for an inner voice in parentheses that rarely slips out", () => {
+    const prompt = buildSystemPrompt(DEFAULT_LINEUP, { memory: true });
+    expect(prompt).toContain("**Inner voice**");
+    expect(prompt).toContain("wrapped entirely in parentheses: `（…）` in Japanese, `(…)` in English");
+    expect(prompt).toContain("Devil's grudging respect");
+    expect(prompt).toContain("At most one slip in the whole banter");
   });
 
   it("omits the memory block on the first run", () => {
@@ -164,7 +213,15 @@ describe("parseDialogue with memory", () => {
 
   it("reads the summary and memos as single lines", () => {
     const raw = JSON.stringify({ language: "en", turns, memory: { summary: " Early\nstart ", angel: "Woke at 5.", devil: "" } });
-    expect(parseDialogue(raw, "en")?.memory).toEqual({ summary: "Early start", notes: { angel: "Woke at 5." } });
+    expect(parseDialogue(raw, "en")?.memory).toEqual({ summary: "Early start", notes: { angel: "Woke at 5." }, impressions: {} });
+  });
+
+  it("reads impressions as tidy lines and skips empty ones", () => {
+    const impressions = { angel: "- Keeps promises \n\n-  Ships often", devil: "  ", other: "ignored" };
+    const raw = JSON.stringify({ language: "en", turns, memory: { summary: "s", angel: "a", devil: "d", impressions } });
+    expect(parseDialogue(raw, "en")?.memory?.impressions).toEqual({ angel: "- Keeps promises\n- Ships often" });
+    const bad = JSON.stringify({ language: "en", turns, memory: { summary: "s", angel: "a", devil: "d", impressions: "oops" } });
+    expect(parseDialogue(bad, "en")?.memory).toEqual({ summary: "s", notes: { angel: "a", devil: "d" }, impressions: {} });
   });
 
   it("keeps the banter when memory is missing or malformed", () => {

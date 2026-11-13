@@ -3,18 +3,22 @@ import { charName } from "./characters";
 import { t, uiLang } from "./i18n";
 import {
   HISTORY_FILE,
+  IMPRESSION_VERSIONS,
   MEMORY_ENTRIES,
+  type MemoEntry,
   type PromptMemo,
   appendHistoryLine,
   appendMemoEntry,
   formatDate,
   formatStamp,
+  impressionFileName,
   isInFolder,
   isSameNoteSameDay,
   linkTarget,
   memoFileName,
   parseMemo,
   removeMemoEntries,
+  toPromptImpression,
   toPromptMemo,
 } from "./memory";
 import type { MemorySettings } from "./settings";
@@ -22,6 +26,8 @@ import type { CharacterSpec, DialogueMemory, SpeakerId } from "./types";
 
 export interface LoadedMemory {
   memos: Record<SpeakerId, PromptMemo[]>;
+  /** Each character's newest impression of the user (missing until the first banter writes one). */
+  impressions: Record<SpeakerId, PromptMemo>;
   /** Total memos across both characters (for the "drawing on N memos" notice). */
   count: number;
 }
@@ -48,31 +54,43 @@ export class MemoryStore {
   }
 
   /**
-   * Each character's latest memos, oldest first. Memos written about `source` itself are skipped,
-   * so regenerating on a saved note does not bring up what was just said about it.
+   * Each character's latest memos (oldest first) and newest impression. Entries written about `source`
+   * itself are skipped, so regenerating on a note does not build on what was just said about it: "Again"
+   * starts from the impression as it was before this note, instead of folding the same note in twice.
    */
   async load(folder: string, source: TFile, lineup: readonly CharacterSpec[]): Promise<LoadedMemory> {
     const memos: Record<SpeakerId, PromptMemo[]> = {};
+    const impressions: Record<SpeakerId, PromptMemo> = {};
     let count = 0;
     for (const c of lineup) {
-      const path = normalizePath(`${folder}/${memoFileName(c.id)}`);
-      const file = this.app.vault.getFileByPath(path);
-      if (!file) continue;
-      const entries = parseMemo(await this.app.vault.cachedRead(file)).entries.filter((e) => {
-        const target = linkTarget(e.heading);
-        return !target || this.app.metadataCache.getFirstLinkpathDest(target, path)?.path !== source.path;
-      });
-      const latest = entries.slice(-MEMORY_ENTRIES).map(toPromptMemo);
-      if (latest.length === 0) continue;
-      memos[c.id] = latest;
-      count += latest.length;
+      const latest = (await this.entriesNotAbout(folder, memoFileName(c.id), source))
+        .slice(-MEMORY_ENTRIES)
+        .map(toPromptMemo);
+      if (latest.length > 0) {
+        memos[c.id] = latest;
+        count += latest.length;
+      }
+      const newest = (await this.entriesNotAbout(folder, impressionFileName(c.id), source)).pop();
+      if (newest) impressions[c.id] = toPromptImpression(newest);
     }
-    return { memos, count };
+    return { memos, impressions, count };
+  }
+
+  /** Entries of a memo-format file in `folder`, minus the ones whose heading links to `source`. */
+  private async entriesNotAbout(folder: string, name: string, source: TFile): Promise<MemoEntry[]> {
+    const path = normalizePath(`${folder}/${name}`);
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) return [];
+    return parseMemo(await this.app.vault.cachedRead(file)).entries.filter((e) => {
+      const target = linkTarget(e.heading);
+      return !target || this.app.metadataCache.getFirstLinkpathDest(target, path)?.path !== source.path;
+    });
   }
 
   /**
-   * Records a banter as soon as it is shown: one line in history.md and one memo per character.
-   * A record for the same note on the same day is replaced, so "Again" never piles up entries.
+   * Records a banter as soon as it is shown: one line in history.md, and one memo and one impression
+   * version per character. A record for the same note on the same day is replaced, so "Again" never
+   * piles up entries.
    */
   async record(
     folder: string,
@@ -96,21 +114,50 @@ export class MemoryStore {
     );
 
     for (const c of lineup) {
-      const path = normalizePath(`${folder}/${memoFileName(c.id)}`);
-      const note = memory.notes[c.id];
-      if (!note) {
-        // No memo this time: still drop today's memo from a discarded banter on this note.
-        const file = this.app.vault.getFileByPath(path);
-        if (file) await this.app.vault.process(file, (data) => removeMemoEntries(data, replacesIn(path)));
-        continue;
-      }
-      const preamble = `${t.memoTitle(c.emoji, charName(c, uiLang))}\n\n${t.memoNote(MEMORY_ENTRIES)}`;
-      await this.upsert(path, (existing) =>
-        appendMemoEntry(existing, { heading: `${stamp} ${this.linkTo(source, path)}`, body: note }, preamble, {
-          replaces: replacesIn(path),
-        }),
-      );
+      const name = charName(c, uiLang);
+      await this.upsertEntry(normalizePath(`${folder}/${memoFileName(c.id)}`), memory.notes[c.id], {
+        source,
+        stamp,
+        replacesIn,
+        preamble: `${t.memoTitle(c.emoji, name)}\n\n${t.memoNote(MEMORY_ENTRIES)}`,
+        max: MEMORY_ENTRIES,
+      });
+      await this.upsertEntry(normalizePath(`${folder}/${impressionFileName(c.id)}`), memory.impressions[c.id], {
+        source,
+        stamp,
+        replacesIn,
+        preamble: `${t.impressionTitle(c.emoji, name)}\n\n${t.impressionNote(IMPRESSION_VERSIONS)}`,
+        max: IMPRESSION_VERSIONS,
+      });
     }
+  }
+
+  /**
+   * Adds `body` as a new entry of the memo-format file at `path`, replacing today's entry for `source`.
+   * With no body, still drops today's entry from a discarded banter on this note.
+   */
+  private async upsertEntry(
+    path: string,
+    body: string | undefined,
+    o: {
+      source: TFile;
+      stamp: string;
+      replacesIn: (fromPath: string) => (heading: string) => boolean;
+      preamble: string;
+      max: number;
+    },
+  ): Promise<void> {
+    if (!body) {
+      const file = this.app.vault.getFileByPath(path);
+      if (file) await this.app.vault.process(file, (data) => removeMemoEntries(data, o.replacesIn(path)));
+      return;
+    }
+    await this.upsert(path, (existing) =>
+      appendMemoEntry(existing, { heading: `${o.stamp} ${this.linkTo(o.source, path)}`, body }, o.preamble, {
+        replaces: o.replacesIn(path),
+        max: o.max,
+      }),
+    );
   }
 
   /** Whether a link target written in `fromPath` points at `file` (also after a rename, via the cache). */

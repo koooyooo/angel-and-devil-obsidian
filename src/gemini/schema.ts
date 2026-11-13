@@ -6,7 +6,8 @@ export const MAX_TURNS = 7;
 
 /**
  * Gemini `responseSchema` (OpenAPI subset), parameterized by the active lineup. With `memory`, the same
- * call also returns a one-line summary for history.md and one memo per character (see src/memory.ts).
+ * call also returns a one-line summary for history.md, one memo per character, and each character's
+ * updated overall impression of the user (see src/memory.ts).
  */
 export function buildResponseSchema(
   lineupIds: readonly [SpeakerId, SpeakerId] = ["angel", "devil"],
@@ -45,9 +46,18 @@ export function buildResponseSchema(
           summary: { type: "STRING" },
           [lineupIds[0]]: { type: "STRING" },
           [lineupIds[1]]: { type: "STRING" },
+          impressions: {
+            type: "OBJECT",
+            properties: {
+              [lineupIds[0]]: { type: "STRING" },
+              [lineupIds[1]]: { type: "STRING" },
+            },
+            required: [lineupIds[0], lineupIds[1]],
+            propertyOrdering: [lineupIds[0], lineupIds[1]],
+          },
         },
-        required: ["summary", lineupIds[0], lineupIds[1]],
-        propertyOrdering: ["summary", lineupIds[0], lineupIds[1]],
+        required: ["summary", lineupIds[0], lineupIds[1], "impressions"],
+        propertyOrdering: ["summary", lineupIds[0], lineupIds[1], "impressions"],
       },
     },
     required: [...base.required, "memory"],
@@ -146,14 +156,28 @@ function parseMemory(raw: unknown, lineup: readonly [CharacterSpec, CharacterSpe
   if (!raw || typeof raw !== "object") return undefined;
   const obj = raw as Record<string, unknown>;
   const oneLine = (v: unknown) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "");
+  // An impression may be a short list: keep its lines, drop blank ones and stray spaces.
+  const lines = (v: unknown) =>
+    typeof v === "string"
+      ? v
+          .split(/\r\n?|\n/)
+          .map((l) => l.replace(/\s+/g, " ").trim())
+          .filter((l) => l.length > 0)
+          .join("\n")
+      : "";
   const summary = oneLine(obj.summary);
   const notes: Record<SpeakerId, string> = {};
+  const impressions: Record<SpeakerId, string> = {};
+  const rawImpressions =
+    obj.impressions && typeof obj.impressions === "object" ? (obj.impressions as Record<string, unknown>) : {};
   for (const c of lineup) {
     const note = oneLine(obj[c.id]);
     if (note) notes[c.id] = note;
+    const impression = lines(rawImpressions[c.id]);
+    if (impression) impressions[c.id] = impression;
   }
-  if (!summary && Object.keys(notes).length === 0) return undefined;
-  return { summary, notes };
+  if (!summary && Object.keys(notes).length === 0 && Object.keys(impressions).length === 0) return undefined;
+  return { summary, notes, impressions };
 }
 
 export function turnCountFor(rounds: 2 | 3): number {

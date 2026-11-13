@@ -144,7 +144,7 @@ export class DialogueController {
       } catch (e) {
         // Unreadable memory should not block the banter: go on without earlier memos.
         console.warn("[angel-and-devil] could not read memory", e);
-        memory = { memos: {}, count: 0 };
+        memory = { memos: {}, impressions: {}, count: 0 };
       }
       if (this.session?.id !== id) return;
     }
@@ -156,7 +156,7 @@ export class DialogueController {
         rounds: s.rounds,
         model: s.textModel,
         lineup: session.lineup,
-        memory: memory && { memos: memory.memos },
+        memory: memory && { memos: memory.memos, impressions: memory.impressions },
       });
     } catch (e) {
       if (this.session?.id !== id) return;

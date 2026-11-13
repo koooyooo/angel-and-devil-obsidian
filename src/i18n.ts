@@ -103,16 +103,19 @@ const ja = {
   setMemoryHeading: "記憶",
   setMemoryEnabled: "掛け合いを記憶する",
   setMemoryEnabledDesc:
-    "掛け合いのたびに（保存しなくても）、2人がそれぞれひとことメモを残し、次からは直近のメモを踏まえて話します。同じノートを同じ日にもう一度掛け合うと、その日のメモは新しい内容で置き換わります。メモは Vault 内のフォルダに普通のノートとして残るので、読んだり直したり消したりできます。オンの間は、メモの内容もノートと一緒に Gemini API に送られます。",
+    "掛け合いのたびに（保存しなくても）、2人がそれぞれメモを残し、あなたへの全体的な印象も書き直します。次からは印象と直近のメモを踏まえて、同じ指摘を繰り返さずに話します。同じノートを同じ日にもう一度掛け合うと、その日の分は新しい内容で置き換わります。どちらも Vault 内のフォルダに普通のノートとして残るので、読んだり直したり消したりできます。オンの間は、メモと印象の内容もノートと一緒に Gemini API に送られます。",
   setMemoryFolder: "記憶フォルダ",
   setMemoryFolderDesc:
-    "history.md と、キャラクターごとのメモ（angel_memo.md など）を置くフォルダ。「.」で始まるフォルダは Obsidian から見えないため使えません。",
+    "history.md と、キャラクターごとのメモ（angel_memo.md など）・印象（angel_impression.md など）を置くフォルダ。「.」で始まるフォルダは Obsidian から見えないため使えません。",
   setMemoryFolderInvalid: "このフォルダ名は使えません。「.」で始まる名前や、* \" < > : | ? を含む名前は指定できません。",
   memoryWriteFailed: "記憶の書き込みに失敗しました。",
   memoryUsed: (n: number) => `過去のメモ ${n} 件も踏まえて話しています。`,
   memoTitle: (emoji: string, name: string) => `# ${emoji} ${name}のメモ`,
   memoNote: (max: number) =>
     `%% 天使と悪魔の記憶です。掛け合いのたびに下へ追加され（同じノート・同じ日の分は置き換え）、直近 ${max} 件だけが残ります。自由に直したり消したりできます。 %%`,
+  impressionTitle: (emoji: string, name: string) => `# ${emoji} ${name}から見たあなた`,
+  impressionNote: (max: number) =>
+    `%% 天使と悪魔の記憶です。掛け合いのたびに、前回の印象と今日のノートから書き直した版が下へ追加され（同じノート・同じ日の分は置き換え）、直近 ${max} 版だけが残ります。次の掛け合いで使われるのは一番下の版です。自由に直せます。 %%`,
   historyTitle: "# 😇😈 掛け合いの履歴",
   historyNote: "%% 掛け合いの一覧です（同じノート・同じ日の分は 1 行にまとまります）。この履歴は Gemini には送られません。 %%",
 };
@@ -219,16 +222,19 @@ const en: Strings = {
   setMemoryHeading: "Memory",
   setMemoryEnabled: "Remember banters",
   setMemoryEnabledDesc:
-    "After every banter (no need to save it), both characters leave a short memo, and later banters take the latest memos into account. Another banter on the same note on the same day replaces that day's memos. The memos are ordinary notes in a vault folder, so you can read, edit, or delete them. While this is on, the memos are sent to the Gemini API together with your note.",
+    "After every banter (no need to save it), both characters leave a memo and rewrite their overall impression of you. Later banters build on the impression and the latest memos, so the pair does not keep repeating the same point. Another banter on the same note on the same day replaces that day's entries. Both are ordinary notes in a vault folder, so you can read, edit, or delete them. While this is on, the memos and impressions are sent to the Gemini API together with your note.",
   setMemoryFolder: "Memory folder",
   setMemoryFolderDesc:
-    "Folder for history.md and each character's memos (angel_memo.md and so on). Folders starting with \".\" cannot be used because Obsidian hides them.",
+    "Folder for history.md and each character's memos (angel_memo.md and so on) and impressions (angel_impression.md and so on). Folders starting with \".\" cannot be used because Obsidian hides them.",
   setMemoryFolderInvalid: "This folder name cannot be used. Names starting with \".\" or containing * \" < > : | ? are not allowed.",
   memoryWriteFailed: "The memory could not be written.",
   memoryUsed: (n: number) => `Also drawing on ${n} earlier ${n === 1 ? "memo" : "memos"}.`,
   memoTitle: (emoji: string, name: string) => `# ${emoji} ${name}'s memos`,
   memoNote: (max: number) =>
     `%% Angel & Devil memory. A memo is added at the bottom after every banter (replacing the same note's memo from the same day); only the latest ${max} are kept. Edit or delete them freely. %%`,
+  impressionTitle: (emoji: string, name: string) => `# ${emoji} You, as ${name} sees you`,
+  impressionNote: (max: number) =>
+    `%% Angel & Devil memory. After every banter, a version rewritten from the previous impression and today's note is added at the bottom (replacing the same note's version from the same day); only the latest ${max} are kept. The next banter uses the bottom one. Edit it freely. %%`,
   historyTitle: "# 😇😈 Banter history",
   historyNote: "%% A list of banters (one line per note and day). This history is never sent to Gemini. %%",
 };

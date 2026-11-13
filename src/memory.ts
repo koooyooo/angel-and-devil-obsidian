@@ -4,6 +4,8 @@
  * Everything lives in plain notes inside the vault, so the user can read, fix, or delete it:
  *   <folder>/history.md          one line per note and day, with a link to the note (never sent to Gemini)
  *   <folder>/<speakerId>_memo.md  each character's own memos; only the last MEMORY_ENTRIES are kept and sent
+ *   <folder>/<speakerId>_impression.md  each character's overall impression of the user, rewritten after every
+ *                                banter; the last IMPRESSION_VERSIONS versions are kept, only the newest is sent
  *
  * A banter is recorded as soon as it is shown. Another banter on the same note on the same day ("Again",
  * or a second run) replaces that day's record instead of adding to it.
@@ -16,11 +18,19 @@ export const DEFAULT_MEMORY_FOLDER = "_angel_and_devil";
 export const HISTORY_FILE = "history.md";
 /** Memos kept per character (and sent back to the model). */
 export const MEMORY_ENTRIES = 10;
-/** A hand-edited memo is cut to this length before it is sent, so one entry cannot eat the budget. */
-export const MAX_MEMO_CHARS = 300;
+/** A memo is cut to this length before it is sent, so one entry cannot eat the budget. */
+export const MAX_MEMO_CHARS = 600;
+/** Impression versions kept per character (older ones only help the user see how it changed). */
+export const IMPRESSION_VERSIONS = 3;
+/** An impression is cut to this length before it is sent. */
+export const MAX_IMPRESSION_CHARS = 1200;
 
 export function memoFileName(id: SpeakerId): string {
   return `${id}_memo.md`;
+}
+
+export function impressionFileName(id: SpeakerId): string {
+  return `${id}_impression.md`;
 }
 
 /**
@@ -189,5 +199,21 @@ export function toPromptMemo(entry: MemoEntry): PromptMemo {
   return {
     when: headingAsText(entry.heading),
     text: text.length > MAX_MEMO_CHARS ? `${text.slice(0, MAX_MEMO_CHARS)}…` : text,
+  };
+}
+
+/**
+ * An impression for the prompt. Unlike a memo it keeps its line breaks (it is usually a short list),
+ * but blank lines and trailing spaces are dropped.
+ */
+export function toPromptImpression(entry: MemoEntry): PromptMemo {
+  const text = entry.body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .join("\n");
+  return {
+    when: headingAsText(entry.heading),
+    text: text.length > MAX_IMPRESSION_CHARS ? `${text.slice(0, MAX_IMPRESSION_CHARS)}…` : text,
   };
 }

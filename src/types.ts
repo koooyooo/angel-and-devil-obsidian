@@ -59,6 +59,11 @@ export interface DialogueMemory {
   summary: string;
   /** Per-character memo, keyed by speaker id. Missing or empty memos are skipped. */
   notes: Record<SpeakerId, string>;
+  /**
+   * Per-character overall impression of the user, rewritten from the previous one plus today's note.
+   * May span several lines (usually a short "- " list). Missing or empty ones are skipped.
+   */
+  impressions: Record<SpeakerId, string>;
 }
 
 export type Rounds = 2 | 3 | "auto";

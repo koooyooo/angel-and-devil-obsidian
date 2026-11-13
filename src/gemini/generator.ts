@@ -15,10 +15,11 @@ export interface GenerateInput {
   model: string;
   lineup?: readonly [CharacterSpec, CharacterSpec];
   /**
-   * Present only when memory is on: the model then also writes today's memos. `memos` holds each
-   * character's earlier memos (oldest first); it may be empty on the first run.
+   * Present only when memory is on: the model then also writes today's memos and updated impressions.
+   * `memos` holds each character's earlier memos (oldest first) and `impressions` their latest overall
+   * impression of the user; both may be empty on the first run.
    */
-  memory?: { memos: Record<SpeakerId, PromptMemo[]> };
+  memory?: { memos: Record<SpeakerId, PromptMemo[]>; impressions?: Record<SpeakerId, PromptMemo> };
 }
 
 const LANGUAGE_NAME: Record<string, string> = { ja: "Japanese", en: "English" };
@@ -77,26 +78,36 @@ export function buildUserMessage(input: GenerateInput): { message: string; langu
       ? `Turns: ${turnCountFor(2)} or ${turnCountFor(3)} (2 or 3 exchanges, then the ${leadName}'s closing), whichever fits the note.`
       : `Turns: exactly ${turnCountFor(input.rounds)} (${input.rounds} exchanges, then the ${leadName}'s closing).`;
   const lines = [languageLine, turnsLine, ""];
-  const memoryBlock = input.memory ? renderMemoryBlock(input.memory.memos, input.lineup ?? DEFAULT_LINEUP) : "";
+  const memoryBlock = input.memory
+    ? renderMemoryBlock(input.memory.memos, input.lineup ?? DEFAULT_LINEUP, input.memory.impressions)
+    : "";
   if (memoryBlock) lines.push(memoryBlock, "");
   lines.push("<note>", input.text, "</note>");
   return { language, message: lines.join("\n") };
 }
 
-/** `<memory>` block for the user message, or "" when neither character has a memo yet. */
+/**
+ * `<memory>` block for the user message, or "" when neither character has a memo or impression yet.
+ * Per character: the current impression of the user first (the big picture), then the dated memos.
+ */
 export function renderMemoryBlock(
   memos: Record<SpeakerId, PromptMemo[]>,
   lineup: readonly [CharacterSpec, CharacterSpec],
+  impressions: Record<SpeakerId, PromptMemo> = {},
 ): string {
   const sections: string[] = [];
   for (const c of lineup) {
+    const name = charName(c, "en");
+    const impression = impressions[c.id];
+    if (impression?.text) {
+      sections.push(`${name}'s impression of the user (speaker "${c.id}", as of ${impression.when}):`, impression.text, "");
+    }
     const list = memos[c.id] ?? [];
-    if (list.length === 0) continue;
-    sections.push(
-      `${charName(c, "en")}'s memos (speaker "${c.id}"):`,
-      ...list.map((m) => `- [${m.when}] ${m.text}`),
-    );
+    if (list.length > 0) {
+      sections.push(`${name}'s memos (speaker "${c.id}"):`, ...list.map((m) => `- [${m.when}] ${m.text}`), "");
+    }
   }
+  while (sections.length && sections[sections.length - 1] === "") sections.pop();
   return sections.length ? ["<memory>", ...sections, "</memory>"].join("\n") : "";
 }
 

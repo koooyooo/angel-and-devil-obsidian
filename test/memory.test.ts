@@ -196,7 +196,9 @@ describe("memory in the request", () => {
 
   it("asks for an impression in two aspects, revising mainly the one today's note speaks to", () => {
     const prompt = buildSystemPrompt(DEFAULT_LINEUP, { memory: true });
-    expect(prompt).toContain("`生活・習慣:` / `関心・考え方:`");
+    expect(prompt).toContain("`[生活]` / `[思考]`");
+    expect(prompt).toContain("`[Life]` / `[Mind]`");
+    expect(prompt).toContain("**no colon after the tag**");
     expect(prompt).toContain("Revise mainly the aspect that today's note speaks to");
   });
 

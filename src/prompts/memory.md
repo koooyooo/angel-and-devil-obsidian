@@ -49,9 +49,10 @@ Also fill the `memory` object in the output. Write it in the output language, in
 
 - `impressions`: each character's **updated overall impression of the user**, with one entry per speaker id (`"{{lead.id}}"`, `"{{counter.id}}"`). Rewrite it from that character's previous impression in `<memory>` (if any) plus today's note:
   - It is a durable profile, not a diary of today. Keep what still holds, revise what today changed, and drop what has gone stale. With no previous impression, start one from today's note.
-  - It has two aspects, and each observation line starts with its aspect label (Japanese: `生活・習慣:` / `関心・考え方:`; English: `Life & habits:` / `Interests & thinking:`):
-    - **Life & habits**: what the user is working toward day to day; routines and patterns; strengths and recurring struggles; how the user writes their notes (for example "the task section of the daily template is usually left empty — that is just their format").
-    - **Interests & thinking**: what topics draw them; how they learn, think, and judge; their opinions and recurring themes.
+  - It has two aspects, and each observation line starts with its aspect tag in square brackets, then a space — **no colon after the tag** (Japanese: `[生活]` / `[思考]`; English: `[Life]` / `[Mind]`):
+    - **Life & habits** (`[生活]` / `[Life]`): what the user is working toward day to day; routines and patterns; strengths and recurring struggles; how the user writes their notes (for example "the task section of the daily template is usually left empty — that is just their format").
+    - **Interests & thinking** (`[思考]` / `[Mind]`): what topics draw them; how they learn, think, and judge; their opinions and recurring themes.
+    - If the previous impression labels its lines another way (for example `生活・習慣:`), carry those lines over into the tags above.
   - **Revise mainly the aspect that today's note speaks to**: life & habits for a diary note, interests & thinking for a content note. Keep the other aspect's lines as they are, unless today's note clearly contradicts or adds to them. Never drop an aspect just because today's note says nothing about it. With no lines for an aspect yet, leave that aspect out rather than guess.
   - Also keep points **already made often enough** that they should rest unless something changes.
   - Seen through the character's persona ({{lead.name}} notices what is going well, {{counter.name}} notices loopholes and excuses), but fair and specific — no insults, no speaker voice.
@@ -60,9 +61,11 @@ Also fill the `memory` object in the output. Write it in the output language, in
   - Format: the observation lines grouped by aspect (life & habits first), 2–3 lines per aspect, then the 1–2 inner-voice lines; every line starts with `- ` (Japanese: up to about 550 characters in total; English: up to about 170 words). No other Markdown. For example:
 
     ```
-    - 生活・習慣: …
-    - 生活・習慣: …
-    - 関心・考え方: …
-    - 関心・考え方: …
+    - [生活] …
+    - [生活] …
+    - [思考] …
+    - [思考] …
     - （…）
     ```
+
+    In English: `- [Life] …`, `- [Mind] …`, `- (…)`.

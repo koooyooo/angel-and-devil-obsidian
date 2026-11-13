@@ -100,10 +100,28 @@ export function renderMemoryBlock(
   return sections.length ? ["<memory>", ...sections, "</memory>"].join("\n") : "";
 }
 
+/** Gemini 2.5 has no thinkingLevel; this budget is its rough equivalent of "low". */
+export const THINKING_BUDGET_25 = 1024;
+
+/**
+ * Banter needs little reasoning, and a thinking model's default (dynamic/high) thinking is most of the
+ * wait. Keep it light but not off: "minimal" risks flattening the characters.
+ * - Gemini 3 and later (and the -latest aliases): thinkingLevel "low".
+ * - Gemini 2.5: a small thinkingBudget.
+ * - Older models (1.x / 2.0) do not think, so nothing is sent.
+ */
+export function thinkingConfigFor(model: string): Record<string, unknown> | undefined {
+  const m = model.toLowerCase();
+  if (/gemini-(1\.|2\.0)/.test(m)) return undefined;
+  if (/gemini-2\.5/.test(m)) return { thinkingBudget: THINKING_BUDGET_25 };
+  return { thinkingLevel: "low" };
+}
+
 export function buildRequest(input: GenerateInput): { body: unknown; language: Lang } {
   const lineup = input.lineup ?? DEFAULT_LINEUP;
   const memory = input.memory !== undefined;
   const { message, language } = buildUserMessage(input);
+  const thinkingConfig = thinkingConfigFor(input.model);
   return {
     language,
     body: {
@@ -113,6 +131,7 @@ export function buildRequest(input: GenerateInput): { body: unknown; language: L
         responseMimeType: "application/json",
         responseSchema: buildResponseSchema([lineup[0].id, lineup[1].id], { memory }),
         temperature: 1.0,
+        ...(thinkingConfig && { thinkingConfig }),
       },
     },
   };

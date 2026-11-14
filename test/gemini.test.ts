@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GeminiClient } from "../src/gemini/client";
 import { GeminiError, extractText, mapHttpError } from "../src/gemini/errors";
-import { DialogueGenerator, buildRequest, buildUserMessage } from "../src/gemini/generator";
+import { DialogueGenerator, buildRequest, buildSystemPrompt, buildUserMessage } from "../src/gemini/generator";
 
 describe("mapHttpError", () => {
   it.each([
@@ -41,10 +41,11 @@ describe("extractText", () => {
 });
 
 describe("buildUserMessage", () => {
-  it("detects Japanese and asks for 5 turns with two exchanges", () => {
+  it("lets the model identify the language in auto mode and asks for 5 turns with two exchanges", () => {
     const { message, language } = buildUserMessage({ text: "今日は早起きした", language: "auto", rounds: 2, model: "m" });
-    expect(language).toBe("ja");
-    expect(message).toContain('detected: Japanese, "ja"');
+    expect(language).toBe("ja"); // local fallback only
+    expect(message).toContain("Output language: the main language of the note. Identify it yourself");
+    expect(message).not.toContain("detected");
     expect(message).toContain("Turns: exactly 5");
     expect(message).toContain("<note>\n今日は早起きした\n</note>");
   });
@@ -53,6 +54,18 @@ describe("buildUserMessage", () => {
     expect(language).toBe("en");
     expect(message).toContain('Output language: English ("en")');
     expect(message).toContain("Turns: 5 or 7");
+  });
+  it("names the newer languages in English", () => {
+    const { message } = buildUserMessage({ text: "x", language: "zh-Hant", rounds: 2, model: "m" });
+    expect(message).toContain('Output language: Traditional Chinese ("zh-Hant")');
+  });
+});
+
+describe("buildSystemPrompt", () => {
+  it("lists every supported language code", () => {
+    const prompt = buildSystemPrompt();
+    for (const code of ["ja", "en", "zh-Hans", "zh-Hant", "fr", "es", "de"]) expect(prompt).toContain(`"${code}"`);
+    expect(prompt).not.toContain("{{languages}}");
   });
 });
 

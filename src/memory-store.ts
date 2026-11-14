@@ -1,6 +1,6 @@
 import { App, TFile, moment, normalizePath } from "obsidian";
 import { charName } from "./characters";
-import { t, uiLang } from "./i18n";
+import { stringsFor } from "./i18n";
 import {
   HISTORY_FILE,
   IMPRESSION_VERSIONS,
@@ -27,7 +27,7 @@ import {
   toPromptMemo,
 } from "./memory";
 import type { MemorySettings } from "./settings";
-import type { CharacterSpec, DialogueMemory, SpeakerId } from "./types";
+import type { CharacterSpec, DialogueMemory, Lang, SpeakerId } from "./types";
 
 /**
  * Obsidian's bundled moment. Its typing (`typeof import * as Moment`) is not callable under esModuleInterop,
@@ -166,8 +166,11 @@ export class MemoryStore {
     lineup: readonly CharacterSpec[],
     memory: DialogueMemory,
     now: Date,
+    lang: Lang,
   ): Promise<void> {
     const { folder, kind } = use;
+    // Titles and notes of newly created memory files, and the character names in them, follow the launch language.
+    const t = stringsFor(lang);
     await this.ensureFolder(folder);
     await this.migrateLegacyMemos(folder, lineup);
     const stamp = formatStamp(now);
@@ -184,7 +187,7 @@ export class MemoryStore {
     );
 
     for (const c of lineup) {
-      const name = charName(c, uiLang);
+      const name = charName(c, lang);
       for (const other of NOTE_KINDS) {
         if (other !== kind) await this.removeToday(normalizePath(`${folder}/${memoFileName(c.id, other)}`), replacesIn);
       }

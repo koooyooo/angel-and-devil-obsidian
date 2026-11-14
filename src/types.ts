@@ -49,8 +49,21 @@ export interface Turn {
 export interface Dialogue {
   language: Lang;
   turns: Turn[];
-  /** Present only when memory is on and the model filled it in (see src/memory.ts). */
+  /**
+   * Present only when memory is on and the model filled it in (see src/memory.ts).
+   * After a reply, this is the memory written by the reply generation (it covers the whole exchange).
+   */
   memory?: DialogueMemory;
+  /** Present once the user has replied (at most once per banter). */
+  reply?: DialogueReply;
+}
+
+/** The user's one reply and the pair's answer to it (Counter first, then Lead). */
+export interface DialogueReply {
+  /** What the user typed: one line, 1–REPLY_MAX_CHARS characters. Plain text. */
+  text: string;
+  /** Exactly two turns: [Counter, Lead]. */
+  turns: Turn[];
 }
 
 /** What one banter leaves behind for the memory files when it is saved. */

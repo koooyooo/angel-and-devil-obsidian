@@ -31,8 +31,10 @@ describe("scrollTopToReveal", () => {
 });
 
 describe("detectLanguage", () => {
-  it("detects kana and kanji as Japanese", () => {
+  it("guesses Japanese from kana, Chinese from ideographs alone, English otherwise", () => {
     expect(detectLanguage("今日はテスト")).toBe("ja");
+    expect(detectLanguage("今天我写了测试")).toBe("zh-Hans");
     expect(detectLanguage("Plain English note")).toBe("en");
+    expect(detectLanguage("Une note en français")).toBe("en");
   });
 });

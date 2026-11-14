@@ -3,7 +3,7 @@ import { DialogueController } from "./controller";
 import { GeminiClient } from "./gemini/client";
 import { DialogueGenerator } from "./gemini/generator";
 import { TtsService } from "./gemini/tts";
-import { t } from "./i18n";
+import { runtimeLanguage, stringsFor, t } from "./i18n";
 import { MemoryStore } from "./memory-store";
 import { AadSettingTab, AadSettings, ApiKeyStore, mergeSettings } from "./settings";
 import { NoteWriter } from "./writer";
@@ -102,7 +102,7 @@ export default class AngelDevilPlugin extends Plugin {
   private startFromActive(): void {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (view) void this.controller.start(view);
-    else new Notice(t.noNote);
+    else new Notice(stringsFor(runtimeLanguage(this.settings.language)).noNote);
   }
 
   /** Header buttons on every Markdown view (F-1.1). The read-aloud launcher is only shown while TTS is on. */

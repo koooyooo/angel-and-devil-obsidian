@@ -1,5 +1,12 @@
 import { getLanguage } from "obsidian";
+import { uiLanguageFor } from "./lang";
+import { de } from "./locales/de";
+import { es } from "./locales/es";
+import { fr } from "./locales/fr";
+import { zhHans } from "./locales/zh-Hans";
+import { zhHant } from "./locales/zh-Hant";
 import type { NoteKind } from "./memory";
+import type { Lang } from "./types";
 
 const ja = {
   pluginName: "天使と悪魔",
@@ -50,7 +57,9 @@ const ja = {
   setCheckOk: "キーを確認できました。",
   setModel: "テキストモデル",
   setModelDesc: "掛け合いの生成に使う Gemini のモデル名。",
-  setLanguage: "掛け合いの言語",
+  setLanguage: "言語",
+  setLanguageDesc:
+    "掛け合いと、起動した画面（ロード画面・ボタン・通知・読み上げの確認）、記憶ファイルの言語です。「ノートに合わせる」では、掛け合いはノートの言語、画面は Obsidian の言語になります。この設定画面とコマンド名はいつも Obsidian の言語です。",
   setLanguageAuto: "ノートに合わせる",
   setRounds: "往復の数",
   setRoundsAuto: "おまかせ",
@@ -63,7 +72,7 @@ const ja = {
   setSpeedNormal: "ふつう",
   setSpeedFast: "はやい",
   setHeading: "保存時の見出し",
-  setHeadingDesc: "{{date}} と {{time}} が日時に置き換わります。空にすると見出しなしで保存します。",
+  setHeadingDesc: "{{date}} と {{time}} が日時に、{{title}} が掛け合いの言語のプラグイン名に置き換わります。空にすると見出しなしで保存します。",
   setRibbon: "リボンにアイコンを表示",
   setStatusBar: "ステータスバーにボタンを表示（デスクトップのみ）",
   setMaxChars: "読み込む最大文字数",
@@ -94,7 +103,7 @@ const ja = {
   setTtsAutoplay: "自動で読み上げる",
   setTtsAutoplayDesc: "掛け合いが表示されたら自動で読み上げます。「毎回確認する」がオンのときは確認が出ます。",
   setTtsSpeedJa: "再生速度（日本語）",
-  setTtsSpeedEn: "再生速度（英語）",
+  setTtsSpeedEn: "再生速度（英語・その他の言語）",
   setTtsVoiceAngel: "天使の声",
   setTtsVoiceDevil: "悪魔の声",
   setTtsStyleAngel: "天使の話し方",
@@ -111,6 +120,16 @@ const ja = {
   setMemoryFolderInvalid: "このフォルダ名は使えません。「.」で始まる名前や、* \" < > : | ? を含む名前は指定できません。",
   memoryWriteFailed: "記憶の書き込みに失敗しました。",
   memoryUsed: (n: number) => `過去のメモ ${n} 件も踏まえて話しています。`,
+  // reply
+  you: "あなた",
+  replyPlaceholder: "ひとこと返す…",
+  replySend: "送る",
+  replyLabel: "掛け合いへの返信",
+  replySavedNotice: "返信もノートに保存しました。",
+  replyResaveAppended: "保存済みの掛け合いが見つからなかったため、返信入りの掛け合いをノート末尾に追加しました。",
+  setReply: "返信欄を表示する",
+  setReplyDesc:
+    "掛け合いの最後に、ひとこと返せる入力欄を出します。返信すると悪魔と天使が 1 往復だけ応えます（1 つの掛け合いにつき 1 回。テキスト生成が 1 回増えます）。",
   memoTitle: (emoji: string, name: string, kind: NoteKind) =>
     `# ${emoji} ${name}のメモ（${kind === "diary" ? "日記" : "コンテンツ"}）`,
   memoNote: (max: number, kind: NoteKind) =>
@@ -120,9 +139,21 @@ const ja = {
     `%% 天使と悪魔の記憶です。掛け合いのたびに、前回の印象と今日のノートから書き直した版が下へ追加され（同じノート・同じ日の分は置き換え）、直近 ${max} 版だけが残ります。次の掛け合いで使われるのは一番下の版です。自由に直せます。 %%`,
   historyTitle: "# 😇😈 掛け合いの履歴",
   historyNote: "%% 掛け合いの一覧です（同じノート・同じ日の分は 1 行にまとまります）。この履歴は Gemini には送られません。 %%",
+  // loading screen (ui/loading-tips.ts)
+  loadingTips: [
+    "天使は、ノートの中の具体的なことを必ず1つ見つけて褒めます。",
+    "悪魔は毎ターン、本当に鋭い指摘を1つだけ混ぜてきます。聞き逃さないように。",
+    "ノートの一部を選択してから始めると、その部分だけについて掛け合います。",
+    "「ノート末尾に保存する」で残した掛け合いには、次回から反応しません。",
+    "読み上げの速度は、設定で日本語と、英語・その他の言語とで別々に変えられます。",
+    "同じ掛け合いをもう一度再生しても、Gemini は呼ばれません（料金もかかりません）。",
+    "天使と悪魔の声は、30 種類の中から選べます。",
+    "暴飲暴食の日記には、天使はまず全肯定してから、そっとひとつだけ提案します。",
+    "ノートが日本語以外でも、天使と悪魔はその言語で掛け合います。",
+  ] as readonly string[],
 };
 
-type Strings = typeof ja;
+export type Strings = typeof ja;
 
 const en: Strings = {
   pluginName: "Angel & Devil",
@@ -172,7 +203,9 @@ const en: Strings = {
   setCheckOk: "The key works.",
   setModel: "Text model",
   setModelDesc: "Gemini model used to write the banter.",
-  setLanguage: "Banter language",
+  setLanguage: "Language",
+  setLanguageDesc:
+    "Language of the banter and of everything a launch shows (loading screen, buttons, notices, the read-aloud confirmation) and of the memory files. With \"Match the note\", the banter follows the note and the screens follow Obsidian. This settings tab and the command names always follow Obsidian.",
   setLanguageAuto: "Match the note",
   setRounds: "Exchanges",
   setRoundsAuto: "Auto",
@@ -185,7 +218,7 @@ const en: Strings = {
   setSpeedNormal: "Normal",
   setSpeedFast: "Fast",
   setHeading: "Heading when saving",
-  setHeadingDesc: "{{date}} and {{time}} are replaced. Leave empty to save without a heading.",
+  setHeadingDesc: "{{date}} and {{time}} become the date and time, {{title}} the plugin name in the banter's language. Leave empty to save without a heading.",
   setRibbon: "Show ribbon icon",
   setStatusBar: "Show status bar button (desktop only)",
   setMaxChars: "Maximum characters to read",
@@ -215,7 +248,7 @@ const en: Strings = {
   setTtsAutoplay: "Read aloud automatically",
   setTtsAutoplayDesc: "Starts reading when the banter appears. You are still asked first while Confirm every time is on.",
   setTtsSpeedJa: "Playback speed (Japanese)",
-  setTtsSpeedEn: "Playback speed (English)",
+  setTtsSpeedEn: "Playback speed (English and other languages)",
   setTtsVoiceAngel: "Angel's voice",
   setTtsVoiceDevil: "Devil's voice",
   setTtsStyleAngel: "Angel's speaking style",
@@ -231,6 +264,16 @@ const en: Strings = {
   setMemoryFolderInvalid: "This folder name cannot be used. Names starting with \".\" or containing * \" < > : | ? are not allowed.",
   memoryWriteFailed: "The memory could not be written.",
   memoryUsed: (n: number) => `Also drawing on ${n} earlier ${n === 1 ? "memo" : "memos"}.`,
+  // reply
+  you: "You",
+  replyPlaceholder: "Say something back…",
+  replySend: "Send",
+  replyLabel: "Reply to the banter",
+  replySavedNotice: "Your reply was saved to the note too.",
+  replyResaveAppended: "The saved banter could not be found, so the banter with your reply was added at the end of the note.",
+  setReply: "Show the reply box",
+  setReplyDesc:
+    "Shows a box at the end of the banter for one short reply. The Devil and the Angel then answer with one exchange (once per banter; one more text generation).",
   memoTitle: (emoji: string, name: string, kind: NoteKind) =>
     `# ${emoji} ${name}'s memos (${kind === "diary" ? "diary" : "content"})`,
   memoNote: (max: number, kind: NoteKind) =>
@@ -240,17 +283,55 @@ const en: Strings = {
     `%% Angel & Devil memory. After every banter, a version rewritten from the previous impression and today's note is added at the bottom (replacing the same note's version from the same day); only the latest ${max} are kept. The next banter uses the bottom one. Edit it freely. %%`,
   historyTitle: "# 😇😈 Banter history",
   historyNote: "%% A list of banters (one line per note and day). This history is never sent to Gemini. %%",
+  loadingTips: [
+    "The Angel always finds one concrete thing in your note to praise.",
+    "Every Devil turn hides exactly one genuinely sharp point. Listen closely.",
+    "Select part of a note before starting to banter about just that part.",
+    "Banter you saved with “Save to end of note” is ignored next time.",
+    "Playback speed can be set separately for Japanese and for English and other languages.",
+    "Replaying the same banter does not call Gemini again (and costs nothing).",
+    "You can pick the Angel’s and the Devil’s voices from 30 options.",
+    "For a night of junk food, the Angel affirms first, then offers just one gentle nudge.",
+    "Whatever language your note is in, the Angel and the Devil banter in it too.",
+  ],
 };
 
-function isJapaneseUi(): boolean {
+const STRINGS: Record<string, Strings> = {
+  ja,
+  en,
+  "zh-Hans": zhHans,
+  "zh-Hant": zhHant,
+  fr,
+  es,
+  de,
+};
+
+function detectUiLang(): Lang {
   try {
-    return getLanguage().toLowerCase().startsWith("ja");
+    return uiLanguageFor(getLanguage());
   } catch {
-    return false;
+    return "en";
   }
 }
 
-/** Obsidian's UI language, as used for character names in the memory files. */
-export const uiLang = isJapaneseUi() ? "ja" : "en";
+/** Obsidian's UI language mapped to a supported code. */
+export const uiLang: Lang = detectUiLang();
 
-export const t: Strings = uiLang === "ja" ? ja : en;
+export function stringsFor(lang: Lang): Strings {
+  return STRINGS[lang] ?? en;
+}
+
+/**
+ * Language of everything a launch shows: the banter modal, loading tips, notices, the TTS confirm and the
+ * memory files. It is the plugin's language setting; with "auto" (match the note) the note's language is only
+ * known after generation, so the screens stay in Obsidian's language while the banter follows the note.
+ */
+export function runtimeLanguage(setting: "auto" | Lang): Lang {
+  return setting === "auto" ? uiLang : setting;
+}
+
+/**
+ * Strings in Obsidian's UI language: for what Obsidian itself shows (settings tab, command names,
+ * ribbon / header / status bar tooltips). Everything a launch shows uses `stringsFor(runtimeLanguage(...))`.
+ */
+export const t: Strings = stringsFor(uiLang);

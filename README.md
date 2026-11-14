@@ -45,6 +45,7 @@ Then in Obsidian: **Settings → Community plugins** → turn off **Restricted m
 1. Get a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) and enter it in **Settings → Angel & Devil**. Use **Check key** to confirm it works.
 2. Open a note and press the 😇😈 button in the note header (or the ribbon icon, or the command **Angel & Devil: Start banter**). Select text first to banter about just that part.
 3. Click / tap or press Space to advance, **Skip** to show everything, **Again** to regenerate, **Save to end of note** to append the banter as a quote block.
+   - When the banter is over, you can **say one thing back** in the box below it. The Devil answers first and the Angel has the last word (one exchange, once per banter). Your line and their answer are included when you save; if you had already saved, the saved block is updated. The box can be hidden in the settings (**Show the reply box**).
 4. Optional: turn on **Read aloud** in the settings to get a 🔊 button. You are asked before every Gemini TTS call (can be turned off); replaying the same banter uses a local cache and makes no request.
 5. Optional: turn on **Remember banters** in the settings. After every banter (saving is not needed), both characters leave a memo and rewrite their overall impression of you. Later banters build on them: the pair can refer back, and avoids repeating a point it has already made. Another banter on the same note on the same day (for example **Again**) replaces that day's record. Everything is kept as ordinary notes in a vault folder (default `_angel_and_devil/`, configurable):
    - `history.md`: one line per note and day, with a link to the note.
@@ -61,6 +62,7 @@ Then in Obsidian: **Settings → Community plugins** → turn off **Restricted m
 - There is no server of our own and no telemetry.
 - The API key is stored in **SecretStorage**, Obsidian's standard place for plugin secrets (Obsidian 1.11.4+; older versions use this plugin's `data.json` in plain text). Other installed plugins can still read it. Details: [docs/api-key.md](docs/api-key.md).
 - Memory (off by default) also sends each character's latest memos about notes of the same kind (up to 10 each) and current impression with the note. `history.md` is never sent. Memos and impressions are written as soon as a banter is shown.
+- Replying to a banter sends the note, the banter, and your reply (plus the memos and impressions when memory is on) to the Gemini API once more.
 - Read aloud (off by default) sends the generated banter text to Gemini TTS. Audio is kept in memory only.
 - Gemini API usage — especially TTS — may be billed to your Google account.
 - Use a **dedicated** API key with a **spend cap** — see [Recommended key hygiene](docs/api-key.md#recommended-key-hygiene).

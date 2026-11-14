@@ -1,5 +1,5 @@
 import { App, Modal } from "obsidian";
-import { t } from "../i18n";
+import type { Strings } from "../i18n";
 
 export interface TtsConfirmResult {
   approved: boolean;
@@ -16,6 +16,7 @@ export function confirmTts(
   app: App,
   info: { model: string; turns: string },
   onApprove: () => void,
+  t: Strings,
 ): Promise<TtsConfirmResult> {
   return new Promise((resolve) => {
     let settled = false;

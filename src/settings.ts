@@ -1,9 +1,10 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import { ANGEL_SPEC, DEVIL_SPEC } from "./characters";
-import { DEFAULT_HEADING_TEMPLATE } from "./format";
+import { DEFAULT_HEADING_TEMPLATE, LEGACY_HEADING_TEMPLATES } from "./format";
 import { GeminiClient } from "./gemini/client";
 import { toGeminiError } from "./gemini/errors";
 import { t } from "./i18n";
+import { LANGUAGES, isSupportedLanguage } from "./lang";
 import { DEFAULT_MEMORY_FOLDER, normalizeMemoryFolder } from "./memory";
 import type { Lang, RevealSpeed, Rounds, SpeakerId, VendorId } from "./types";
 import type AngelDevilPlugin from "./main";
@@ -29,6 +30,12 @@ export interface AadSettings {
   maxInputChars: number;
   tts: TtsSettings;
   memory: MemorySettings;
+  reply: ReplySettings;
+}
+
+/** One reply from the user after a banter (feature: reply). On by default. */
+export interface ReplySettings {
+  enabled: boolean;
 }
 
 /** Memory across banters (ADR-0004). Off by default; the files live in a visible vault folder. */
@@ -90,6 +97,9 @@ export const DEFAULT_SETTINGS: AadSettings = {
     enabled: false,
     folder: DEFAULT_MEMORY_FOLDER,
   },
+  reply: {
+    enabled: true,
+  },
 };
 
 function isValidLineup(value: unknown): value is [SpeakerId, SpeakerId] {
@@ -123,6 +133,7 @@ export function mergeSettings(saved: unknown): AadSettings {
   const ttsVendor =
     typeof tts.vendor === "string" && tts.vendor.trim().length > 0 ? tts.vendor.trim() : d.vendor;
   const memory = (s.memory ?? {}) as Partial<MemorySettings>;
+  const reply = (s.reply ?? {}) as Partial<ReplySettings>;
   const memoryFolder =
     (typeof memory.folder === "string" && normalizeMemoryFolder(memory.folder)) || DEFAULT_SETTINGS.memory.folder;
 
@@ -131,6 +142,12 @@ export function mergeSettings(saved: unknown): AadSettings {
     ...s,
     schemaVersion,
     textVendor,
+    language: isSupportedLanguage(s.language) ? s.language : "auto",
+    // Earlier defaults had a fixed title; treat them as "not customized" so the title follows the language.
+    headingTemplate:
+      typeof s.headingTemplate !== "string" || LEGACY_HEADING_TEMPLATES.includes(s.headingTemplate)
+        ? DEFAULT_SETTINGS.headingTemplate
+        : s.headingTemplate,
     lineup,
     tts: {
       ...d,
@@ -143,6 +160,9 @@ export function mergeSettings(saved: unknown): AadSettings {
     memory: {
       enabled: memory.enabled === true,
       folder: memoryFolder,
+    },
+    reply: {
+      enabled: reply.enabled !== false,
     },
   };
 }
@@ -317,17 +337,14 @@ export class AadSettingTab extends PluginSettingTab {
           }),
       );
 
-    new Setting(containerEl).setName(t.setLanguage).addDropdown((d) =>
-      d
-        .addOption("auto", t.setLanguageAuto)
-        .addOption("ja", "日本語")
-        .addOption("en", "English")
-        .setValue(s.language)
-        .onChange(async (value) => {
-          s.language = value as AadSettings["language"];
-          await this.plugin.saveSettings();
-        }),
-    );
+    new Setting(containerEl).setName(t.setLanguage).setDesc(t.setLanguageDesc).addDropdown((d) => {
+      d.addOption("auto", t.setLanguageAuto);
+      for (const l of LANGUAGES) d.addOption(l.code, l.native);
+      d.setValue(s.language).onChange(async (value) => {
+        s.language = value as AadSettings["language"];
+        await this.plugin.saveSettings();
+      });
+    });
 
     new Setting(containerEl).setName(t.setRounds).addDropdown((d) =>
       d
@@ -390,6 +407,16 @@ export class AadSettingTab extends PluginSettingTab {
         }),
       );
     }
+
+    new Setting(containerEl)
+      .setName(t.setReply)
+      .setDesc(t.setReplyDesc)
+      .addToggle((tg) =>
+        tg.setValue(s.reply.enabled).onChange(async (value) => {
+          s.reply.enabled = value;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     new Setting(containerEl)
       .setName(t.setMaxChars)

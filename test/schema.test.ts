@@ -57,8 +57,15 @@ describe("parseDialogue", () => {
     expect(parseDialogue(json([A(), D(""), A(), D(" "), A()]), "en")).toBeNull();
   });
 
-  it("falls back to the detected language", () => {
-    expect(parseDialogue(json([A(), D(), A(), D(), A()], "fr"), "ja")?.language).toBe("ja");
+  it("takes the language the model reports, falling back for unsupported codes", () => {
+    expect(parseDialogue(json([A(), D(), A(), D(), A()], "fr"), "ja")?.language).toBe("fr");
+    expect(parseDialogue(json([A(), D(), A(), D(), A()], "zh-Hant"), "zh-Hans")?.language).toBe("zh-Hant");
+    expect(parseDialogue(json([A(), D(), A(), D(), A()], "ko"), "ja")?.language).toBe("ja");
+    expect(parseDialogue(JSON.stringify({ turns: [A(), D(), A(), D(), A()] }), "en")?.language).toBe("en");
+  });
+
+  it("offers every supported language in the response schema", () => {
+    expect(buildResponseSchema().properties.language.enum).toEqual(["ja", "en", "zh-Hans", "zh-Hant", "fr", "es", "de"]);
   });
 
   it("supports a custom or reversed lineup where the lead character opens and closes", () => {

@@ -6,7 +6,7 @@ import { renderAngelAvatar, renderDevilAvatar } from "./ui/characters";
 export const ANGEL_SPEC: CharacterSpec = {
   id: "angel",
   tier: "free",
-  name: { ja: "天使", en: "Angel" },
+  name: { ja: "天使", en: "Angel", "zh-Hans": "天使", "zh-Hant": "天使", fr: "Ange", es: "Ángel", de: "Engel" },
   ttsSpeakerName: "Angel",
   emoji: "😇",
   promptMarkdown: angelPersona,
@@ -24,7 +24,7 @@ export const ANGEL_SPEC: CharacterSpec = {
 export const DEVIL_SPEC: CharacterSpec = {
   id: "devil",
   tier: "free",
-  name: { ja: "悪魔", en: "Devil" },
+  name: { ja: "悪魔", en: "Devil", "zh-Hans": "恶魔", "zh-Hant": "惡魔", fr: "Démon", es: "Demonio", de: "Teufel" },
   ttsSpeakerName: "Devil",
   emoji: "😈",
   promptMarkdown: devilPersona,

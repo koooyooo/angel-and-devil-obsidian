@@ -1,12 +1,13 @@
 import { DEFAULT_LINEUP, charName } from "../characters";
-import { detectLanguage } from "../lang";
+import { LANGUAGES, detectLanguage, languageName } from "../lang";
 import type { NoteKind, PromptMemo } from "../memory";
 import memoryRules from "../prompts/memory.md";
+import replyRules from "../prompts/reply.md";
 import rules from "../prompts/rules.md";
-import type { CharacterSpec, Dialogue, Lang, Rounds, SpeakerId } from "../types";
+import type { CharacterSpec, Dialogue, DialogueMemory, Lang, Rounds, SpeakerId, Turn } from "../types";
 import type { GeminiClient } from "./client";
 import { GeminiError } from "./errors";
-import { buildResponseSchema, parseDialogue, turnCountFor } from "./schema";
+import { buildReplySchema, buildResponseSchema, parseDialogue, parseReply, turnCountFor } from "./schema";
 
 export interface GenerateInput {
   text: string;
@@ -23,8 +24,6 @@ export interface GenerateInput {
   memory?: { kind?: NoteKind; memos: Record<SpeakerId, PromptMemo[]>; impressions?: Record<SpeakerId, PromptMemo> };
 }
 
-const LANGUAGE_NAME: Record<string, string> = { ja: "Japanese", en: "English" };
-
 function renderTemplate(template: string, lineup: readonly [CharacterSpec, CharacterSpec]): string {
   const [lead, counter] = lineup;
   return template
@@ -33,8 +32,11 @@ function renderTemplate(template: string, lineup: readonly [CharacterSpec, Chara
     .split("{{lead.emoji}}").join(lead.emoji)
     .split("{{counter.id}}").join(counter.id)
     .split("{{counter.name}}").join(charName(counter, "en"))
-    .split("{{counter.emoji}}").join(counter.emoji);
+    .split("{{counter.emoji}}").join(counter.emoji)
+    .split("{{languages}}").join(LANGUAGE_LIST);
 }
+
+const LANGUAGE_LIST = LANGUAGES.map((l) => `\`"${l.code}"\` (${l.name})`).join(", ");
 
 export function buildSystemPrompt(
   lineup: readonly [CharacterSpec, CharacterSpec] = DEFAULT_LINEUP,
@@ -63,17 +65,15 @@ export function buildSystemPrompt(
 export const SYSTEM_PROMPT = buildSystemPrompt(DEFAULT_LINEUP);
 
 export function buildUserMessage(input: GenerateInput): { message: string; language: Lang } {
-  const detected = detectLanguage(input.text);
-  const language = input.language === "auto" ? detected : input.language;
-  const detectedName = LANGUAGE_NAME[detected] ?? detected;
-  const langName = LANGUAGE_NAME[language] ?? language;
+  // In "auto" the model identifies the note's language; the local guess is only a fallback for a bad answer.
+  const language = input.language === "auto" ? detectLanguage(input.text) : input.language;
   const [lead] = input.lineup ?? DEFAULT_LINEUP;
   const leadName = charName(lead, "en");
 
   const languageLine =
     input.language === "auto"
-      ? `Output language: match the note's language (detected: ${detectedName}, "${detected}").`
-      : `Output language: ${langName} ("${language}").`;
+      ? "Output language: the main language of the note. Identify it yourself and report its code in `language`."
+      : `Output language: ${languageName(language)} ("${language}").`;
   const turnsLine =
     input.rounds === "auto"
       ? `Turns: ${turnCountFor(2)} or ${turnCountFor(3)} (2 or 3 exchanges, then the ${leadName}'s closing), whichever fits the note.`
@@ -145,6 +145,74 @@ export function buildRequest(input: GenerateInput): { body: unknown; language: L
   };
 }
 
+/** What the user replied to a banter (feature: reply). */
+export interface ReplyInput {
+  /** Exactly the input the banter was generated from (same memory snapshot), so the prompt prefix matches. */
+  base: GenerateInput;
+  dialogue: Dialogue;
+  /** Already normalized with normalizeReply(). */
+  replyText: string;
+}
+
+export interface ReplyResult {
+  /** [Counter, Lead]. */
+  turns: Turn[];
+  memory?: DialogueMemory;
+}
+
+/** Keeps the user's text from closing the tag it sits in. */
+function neutralizeTag(text: string, tag: string): string {
+  return text.split(`</${tag}>`).join(`</ ${tag}>`);
+}
+
+/**
+ * The reply request's user message: the banter's own user message, unchanged, followed by the banter, the
+ * user's reply, and the follow-up rules. The system prompt is also the banter's own, so the whole prefix can hit
+ * Gemini's implicit cache.
+ */
+export function buildReplyMessage(input: ReplyInput): string {
+  const lineup = input.base.lineup ?? DEFAULT_LINEUP;
+  const { message } = buildUserMessage(input.base);
+  const label = (speaker: SpeakerId) => {
+    const spec = lineup.find((c) => c.id === speaker);
+    return spec ? `${charName(spec, "en")} ("${speaker}")` : speaker;
+  };
+  const banter = input.dialogue.turns.map((turn) => `${label(turn.speaker)}: ${turn.text.replace(/\s+/g, " ")}`);
+  const language = input.dialogue.language;
+  const langName = languageName(language);
+  return [
+    message,
+    "",
+    "<banter>",
+    ...banter.map((line) => neutralizeTag(line, "banter")),
+    "</banter>",
+    "",
+    "<user_reply>",
+    neutralizeTag(input.replyText, "user_reply"),
+    "</user_reply>",
+    "",
+    renderTemplate(replyRules, lineup).trim(),
+    "",
+    `Output language for the reply: ${langName} ("${language}"), the same as the banter.`,
+  ].join("\n");
+}
+
+export function buildReplyRequest(input: ReplyInput): { body: unknown } {
+  const lineup = input.base.lineup ?? DEFAULT_LINEUP;
+  const memory = input.base.memory !== undefined;
+  return {
+    body: {
+      systemInstruction: { parts: [{ text: buildSystemPrompt(lineup, { memory }) }] },
+      contents: [{ role: "user", parts: [{ text: buildReplyMessage(input) }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: buildReplySchema([lineup[0].id, lineup[1].id], { memory }),
+        temperature: 1.0,
+      },
+    },
+  };
+}
+
 /** DialogueGenerator (design doc §2.2, §5.6): builds the prompt, calls Gemini, validates the result. */
 export class DialogueGenerator {
   constructor(private readonly client: GeminiClient) {}
@@ -157,6 +225,18 @@ export class DialogueGenerator {
       const text = await this.client.generateText(input.model, body);
       const dialogue = parseDialogue(text, language, lineup);
       if (dialogue) return dialogue;
+    }
+    throw new GeminiError("bad_output");
+  }
+
+  /** The pair's answer to the user's reply (feature: reply). Same one-retry rule as generate(). */
+  async reply(input: ReplyInput): Promise<ReplyResult> {
+    const lineup = input.base.lineup ?? DEFAULT_LINEUP;
+    const { body } = buildReplyRequest(input);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const text = await this.client.generateText(input.base.model, body);
+      const result = parseReply(text, lineup);
+      if (result) return result;
     }
     throw new GeminiError("bad_output");
   }

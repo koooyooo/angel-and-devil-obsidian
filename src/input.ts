@@ -47,3 +47,11 @@ export function prepareInput(raw: string, options: PrepareOptions): PreparedInpu
   }
   return { ok: true, text, truncated: false };
 }
+
+/** Longest reply the user can send after a banter (feature: reply, R-4). */
+export const REPLY_MAX_CHARS = 200;
+
+/** One line, trimmed, at most REPLY_MAX_CHARS characters. "" means nothing to send. */
+export function normalizeReply(raw: string): string {
+  return Array.from(raw.replace(/\s+/g, " ").trim()).slice(0, REPLY_MAX_CHARS).join("").trim();
+}

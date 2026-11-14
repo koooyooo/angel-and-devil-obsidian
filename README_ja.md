@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/m
 特定のバージョンを指定してインストールする場合は、第2引数にバージョンを渡します:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/main/install.sh | sh -s -- /path/to/your/vault 0.1.0
+curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/main/install.sh | sh -s -- /path/to/your/vault 0.2.0
 ```
 
 実行後、Obsidian の **設定 → コミュニティプラグイン** を開き、必要に応じて **制限モード** をオフにした上で **Angel & Devil** を有効化してください（アップデート時は一度オフ→オンにするか、Obsidian をリロードしてください）。

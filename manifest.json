@@ -1,7 +1,7 @@
 {
   "id": "angel-and-devil",
   "name": "Angel & Devil",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.8.7",
   "description": "An angel and a devil read your note and banter about it. Uses your own Gemini API key.",
   "author": "koooyooo",

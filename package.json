@@ -1,6 +1,6 @@
 {
   "name": "obsidian-angel-and-devil",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An angel and a devil read your note and banter about it.",
   "main": "main.js",
   "private": true,

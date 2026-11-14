@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/m
 To install a specific version, pass it as the second argument:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/main/install.sh | sh -s -- /path/to/your/vault 0.1.0
+curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/main/install.sh | sh -s -- /path/to/your/vault 0.2.0
 ```
 
 Then in Obsidian: **Settings → Community plugins** → turn off **Restricted mode** if needed, and enable **Angel & Devil** (if updating, turn the plugin off and on again or reload Obsidian).

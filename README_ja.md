@@ -12,9 +12,29 @@ https://github.com/user-attachments/assets/c8639819-61c3-4158-adbb-76ce91a943aa
 
 ## インストール方法
 
-### 方法 1: インストールスクリプトを使う（GitHub Releases から直接導入）
+まだ Obsidian のコミュニティプラグイン一覧には載っていないため、次のどれかの方法で入れてください。Windows・macOS・Linux・モバイルのどれでも使える **方法 1（BRAT）** をおすすめします。
 
-最新の Release からビルド済みファイル（`main.js`, `manifest.json`, `styles.css`）を Obsidian の Vault（保管庫）へ直接ダウンロードして配置します（更新時も既存の設定 `data.json` はそのまま保持されます）。
+### 方法 1: BRAT を使う（おすすめ・自動アップデート対応）
+
+Windows / macOS / Linux / iOS / Android のどれでも、Obsidian の中だけで完結します。
+
+1. **設定 → コミュニティプラグイン** を開き、必要なら **制限モード** をオフにします。
+2. **閲覧** から [BRAT](https://github.com/TfTHacker/obsidian42-brat) を検索してインストールし、有効化します。
+3. **設定 → BRAT → Add Beta plugin** を開き、`koooyooo/angel-and-devil-obsidian` を入力して追加します。
+4. **設定 → コミュニティプラグイン** で **Angel & Devil** を有効化します。
+
+### 方法 2: 手動でインストールする（BRAT を使わない場合）
+
+パソコン（Windows / macOS / Linux）で行います。更新はリリースのたびに同じ手順でやり直します。
+
+1. [最新の GitHub Release](https://github.com/koooyooo/angel-and-devil-obsidian/releases/latest) から `angel-and-devil.zip` をダウンロードして展開します（Windows は右クリック →「すべて展開」、macOS はダブルクリック）。`main.js`・`manifest.json`・`styles.css` の入った `angel-and-devil` フォルダができます。
+2. **設定 → コミュニティプラグイン** の「インストール済みプラグイン」の横にあるフォルダのアイコンを押すと、`<vault>/.obsidian/plugins/` が開きます。そこへ `angel-and-devil` フォルダごと移します（`<vault>/.obsidian/plugins/angel-and-devil/main.js` になれば正しい置き場所です）。
+   - macOS の Finder では `.obsidian` が隠れています。`Cmd` + `Shift` + `.` で表示できます。`plugins` フォルダがなければ作ってください。
+3. 「インストール済みプラグイン」の横の再読み込みのアイコンを押し、**Angel & Devil** を有効化します。
+
+### 方法 3: インストールスクリプトを使う（macOS / Linux・開発者向け）
+
+最新の Release からビルド済みファイル（`main.js`, `manifest.json`, `styles.css`）を Vault へ直接ダウンロードして配置します（更新時も既存の設定 `data.json` はそのまま保持されます）。**Windows では動きません。**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/main/install.sh | sh -s -- /path/to/your/vault
@@ -28,26 +48,14 @@ curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/m
 
 実行後、Obsidian の **設定 → コミュニティプラグイン** を開き、必要に応じて **制限モード** をオフにした上で **Angel & Devil** を有効化してください（アップデート時は一度オフ→オンにするか、Obsidian をリロードしてください）。
 
-### 方法 2: BRAT を使う（自動アップデート対応）
-
-1. Obsidian のコミュニティプラグインから [BRAT](https://github.com/TfTHacker/obsidian42-brat) をインストールします。
-2. **設定 → BRAT → Add Beta plugin** を開き、`koooyooo/angel-and-devil-obsidian` を入力して追加します。
-3. **設定 → コミュニティプラグイン** で **Angel & Devil** を有効化します。
-
-### 方法 3: 手動ダウンロード
-
-1. [最新の GitHub Release](https://github.com/koooyooo/angel-and-devil-obsidian/releases/latest) から `angel-and-devil.zip`（または `main.js`, `manifest.json`, `styles.css` の3ファイル）をダウンロードします。
-2. `<vault>/.obsidian/plugins/angel-and-devil/` フォルダを作成し、その中に `main.js`, `manifest.json`, `styles.css` を配置します。
-3. **設定 → コミュニティプラグイン** で **Angel & Devil** を有効化します。
-
 ## 使い方
 
 1. [Google AI Studio](https://aistudio.google.com/apikey) で Gemini API キーを取得し、Obsidian の **設定 → Angel & Devil** に入力します。**キーをテスト** ボタンで動作確認ができます。
 2. ノートを開き、ノートヘッダーの 😇😈 ボタン（または左リボンのアイコン、コマンドパレットの **Angel & Devil: 掛け合いを始める**）を押します。テキストを選択してから実行すると、選択範囲だけを対象に掛け合いします。
 3. クリック / タップまたは Space キーで次のセリフへ進みます。**スキップ** で全ターン一括表示、**もう一度** で再生成、**ノート末尾に保存する** で掛け合いを引用ブロックとしてノート末尾に追記します。
    - 掛け合いが終わると、下の入力欄から **ひとこと返す** ことができます。悪魔が先に応え、天使が締めます（1 往復。1 つの掛け合いにつき 1 回）。保存すると、あなたの一言と 2 人の返事も入ります。返信前に保存していた場合は、保存したブロックが返信入りのものに置き換わります。入力欄は設定（**返信欄を表示する**）で隠せます。
-4. （任意）設定で **音声で読み上げる** をオンにすると、モーダルに 🔊 ボタンが表示されます。Gemini TTS の呼び出し前には確認ダイアログが表示されます（設定で省略可）。同じ掛け合いの再生はメモリ上のキャッシュを使うため再リクエストは発生しません。
-5. （任意）設定で **掛け合いを記憶する** をオンにすると、掛け合いのたびに（ノートに保存しなくても）2 人がそれぞれメモを残し、あなたへの全体的な印象も書き直します。次からはそれを踏まえて、過去に触れたり、一度した指摘を繰り返さないようにしたりして話します。同じノートを同じ日にもう一度掛け合うと（**もう一度** を含む）、その日の記録は置き換わります。記憶は Vault 内のフォルダ（既定は `_angel_and_devil/`、設定で変更可）に普通のノートとして残ります。
+4. （推奨）設定で **読み上げを有効にする** をオン（初期値はオフ）にすると、モーダルに 🔊 ボタンが表示されます。2 人の声と、声に合わせて動くキャラクターが楽しめます。ただし音声はテキストより料金が高くなることがあるため、Gemini TTS の呼び出し前には確認ダイアログが表示されます（設定で省略可）。同じ掛け合いの再生はメモリ上のキャッシュを使うため再リクエストは発生しません。
+5. （推奨）設定で **掛け合いを記憶する** をオン（初期値はオフ）にします。使うほど 2 人の話がかみ合ってくる機能で、メモは掛け合いと同じリクエストで返るため Gemini の呼び出しは増えません。オンにすると、掛け合いのたびに（ノートに保存しなくても）2 人がそれぞれメモを残し、あなたへの全体的な印象も書き直します。次からはそれを踏まえて、過去に触れたり、一度した指摘を繰り返さないようにしたりして話します。同じノートを同じ日にもう一度掛け合うと（**もう一度** を含む）、その日の記録は置き換わります。記憶は Vault 内のフォルダ（既定は `_angel_and_devil/`、設定で変更可）に普通のノートとして残ります。
    - `history.md`: ノートと日付ごとに 1 行。ノートへのリンク付き。
    - `angel_memo_diary.md` / `devil_memo_diary.md`: キャラクターごとの、日記についてのメモ（その日の出来事・自分が言ったこと・次に確かめたいこと）。直近 10 件だけが残ります。自由に直したり消したりできます。
    - `angel_memo_content.md` / `devil_memo_content.md`: 日記以外のノート（記事・読書メモ・アイデアなど）についてのメモ（何についてのノートか・そこから見える関心・自分が言ったこと）。直近 10 件。
@@ -89,7 +97,7 @@ npm test        # ユニットテスト (Vitest)
 
 ビルド後、`main.js`, `manifest.json`, `styles.css` を `<vault>/.obsidian/plugins/angel-and-devil/` にコピー（またはシンボリックリンク）し、制限モードをオフにしてプラグインを有効化してください。動作確認用のサンプルノートは `test/fixtures/notes/` にあります。
 
-`src/prompts/angel.md` と `devil.md` のペルソナプロンプトは、CLI / Agent Skill 版の [dot-agent-angel-and-devil](https://github.com/koooyooo/dot-agent-angel-and-devil) (`skills/angel-and-devil-note/references/`) を正本としています。
+`src/characters/<id>/persona.md` のペルソナプロンプトは、CLI / Agent Skill 版の [dot-agent-angel-and-devil](https://github.com/koooyooo/dot-agent-angel-and-devil) (`skills/angel-and-devil-note/references/`) を正本としています。
 
 ## ライセンス
 

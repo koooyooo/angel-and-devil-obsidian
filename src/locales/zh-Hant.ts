@@ -3,8 +3,6 @@ import type { Strings } from "../i18n";
 // Traditional Chinese (Taiwan) UI strings. Machine-drafted; native review welcome.
 export const zhHant: Strings = {
   pluginName: "天使與惡魔",
-  angel: "天使",
-  devil: "惡魔",
   commandStart: "開始鬥嘴",
   actionTitle: "天使與惡魔鬥嘴",
   thinking: "正在閱讀筆記…",
@@ -97,10 +95,8 @@ export const zhHant: Strings = {
   setTtsAutoplayDesc: "鬥嘴顯示後自動朗讀。開啟「每次確認」時仍會先詢問。",
   setTtsSpeedJa: "播放速度（日語）",
   setTtsSpeedEn: "播放速度（英語及其他語言）",
-  setTtsVoiceAngel: "天使的聲音",
-  setTtsVoiceDevil: "惡魔的聲音",
-  setTtsStyleAngel: "天使的說話方式",
-  setTtsStyleDevil: "惡魔的說話方式",
+  setTtsVoice: (name: string) => `${name}的聲音`,
+  setTtsStyle: (name: string) => `${name}的說話方式`,
   setTtsStyleDesc: "建議用英文填寫（例如：warm, bright, polite）。",
   // memory
   setMemoryHeading: "記憶",

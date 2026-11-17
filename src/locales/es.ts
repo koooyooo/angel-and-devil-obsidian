@@ -3,8 +3,6 @@ import type { Strings } from "../i18n";
 // Spanish UI strings. Machine-drafted; native review welcome.
 export const es: Strings = {
   pluginName: "Ángel y Demonio",
-  angel: "Ángel",
-  devil: "Demonio",
   commandStart: "Iniciar diálogo",
   actionTitle: "Diálogo de Ángel y Demonio",
   thinking: "Leyendo tu nota…",
@@ -98,10 +96,8 @@ export const es: Strings = {
     "Empieza a leer en cuanto aparece el diálogo. Mientras «Confirmar cada vez» esté activado, se te seguirá preguntando antes.",
   setTtsSpeedJa: "Velocidad de reproducción (japonés)",
   setTtsSpeedEn: "Velocidad de reproducción (inglés y otros idiomas)",
-  setTtsVoiceAngel: "Voz del Ángel",
-  setTtsVoiceDevil: "Voz del Demonio",
-  setTtsStyleAngel: "Forma de hablar del Ángel",
-  setTtsStyleDevil: "Forma de hablar del Demonio",
+  setTtsVoice: (name: string) => `Voz: ${name}`,
+  setTtsStyle: (name: string) => `Forma de hablar: ${name}`,
   setTtsStyleDesc: "Funciona mejor en inglés (p. ej., warm, bright, polite).",
   setMemoryHeading: "Memoria",
   setMemoryEnabled: "Recordar los diálogos",

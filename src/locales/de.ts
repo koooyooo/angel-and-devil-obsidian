@@ -3,8 +3,6 @@ import type { Strings } from "../i18n";
 // German UI strings. Machine-drafted; native review welcome.
 export const de: Strings = {
   pluginName: "Engel & Teufel",
-  angel: "Engel",
-  devil: "Teufel",
   commandStart: "Dialog starten",
   actionTitle: "Engel-&-Teufel-Dialog",
   thinking: "Notiz wird gelesen…",
@@ -98,10 +96,8 @@ export const de: Strings = {
     "Liest vor, sobald der Dialog erscheint. Solange „Jedes Mal bestätigen“ an ist, wirst du trotzdem zuerst gefragt.",
   setTtsSpeedJa: "Wiedergabegeschwindigkeit (Japanisch)",
   setTtsSpeedEn: "Wiedergabegeschwindigkeit (Englisch und andere Sprachen)",
-  setTtsVoiceAngel: "Stimme des Engels",
-  setTtsVoiceDevil: "Stimme des Teufels",
-  setTtsStyleAngel: "Sprechweise des Engels",
-  setTtsStyleDevil: "Sprechweise des Teufels",
+  setTtsVoice: (name: string) => `Stimme: ${name}`,
+  setTtsStyle: (name: string) => `Sprechweise: ${name}`,
   setTtsStyleDesc: "Englisch funktioniert am besten (z. B. warm, bright, polite).",
   setMemoryHeading: "Gedächtnis",
   setMemoryEnabled: "Dialoge merken",

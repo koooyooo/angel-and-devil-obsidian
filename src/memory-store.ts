@@ -1,4 +1,3 @@
-import { App, TFile, moment, normalizePath } from "obsidian";
 import { charName } from "./characters";
 import { stringsFor } from "./i18n";
 import {
@@ -26,14 +25,10 @@ import {
   toPromptImpression,
   toPromptMemo,
 } from "./memory";
-import type { MemorySettings } from "./settings";
+import { normalizeVaultPath } from "./path";
+import type { DailyNoteRules, NoteRef, NoteStore } from "./ports";
+import type { MemorySettings } from "./settings-model";
 import type { CharacterSpec, DialogueMemory, Lang, SpeakerId } from "./types";
-
-/**
- * Obsidian's bundled moment. Its typing (`typeof import * as Moment`) is not callable under esModuleInterop,
- * although the runtime value is the moment function.
- */
-const parseDate = moment as unknown as (text: string, format: string, strict: boolean) => { isValid(): boolean };
 
 export interface LoadedMemory {
   /** Each character's memos about notes of the same kind as this one. */
@@ -51,12 +46,13 @@ export interface MemoryUse {
 }
 
 /**
- * MemoryStore (ADR-0004): reads and writes the memory notes through the Vault API, so they are
+ * MemoryStore (ADR-0004): reads and writes the memory notes through the NoteStore, so they are
  * ordinary, visible, synced notes. Nothing is created until the first banter is shown with memory on.
  */
 export class MemoryStore {
   constructor(
-    private readonly app: App,
+    private readonly notes: NoteStore,
+    private readonly daily: DailyNoteRules,
     private readonly settings: () => MemorySettings,
   ) {}
 
@@ -64,47 +60,23 @@ export class MemoryStore {
    * The memory to use for a banter on `source`, or null when memory is off. A note inside the memory
    * folder itself never uses memory, so the pair does not react to (or write about) their own memos.
    */
-  async useFor(source: TFile): Promise<MemoryUse | null> {
+  async useFor(source: NoteRef): Promise<MemoryUse | null> {
     const s = this.settings();
     if (!s.enabled) return null;
-    const folder = normalizePath(s.folder);
+    const folder = normalizeVaultPath(s.folder);
     if (isInFolder(source.path, folder)) return null;
-    const daily = dailyNoteRule(await this.readDailyNoteSettings());
+    // Read on every banter so a change to the Daily notes settings applies at once.
+    const daily = dailyNoteRule(await this.daily.readSettings());
     const kind = noteKind(
       {
         path: source.path,
         basename: source.basename,
-        frontmatter: this.app.metadataCache.getFileCache(source)?.frontmatter,
+        frontmatter: this.notes.frontmatter(source),
       },
-      daily && { folder: daily.folder ? normalizePath(daily.folder) : "", format: daily.format },
-      (text, format) => parseDate(text, format, true).isValid(),
+      daily && { folder: daily.folder ? normalizeVaultPath(daily.folder) : "", format: daily.format },
+      this.daily.matchesFormat,
     );
     return { folder, kind };
-  }
-
-  /**
-   * Obsidian's core Daily notes settings, read on every banter so a change there applies at once.
-   * Null when the core plugin is turned off or nothing can be read; isDiaryNote then falls back to dated names.
-   */
-  private async readDailyNoteSettings(): Promise<unknown> {
-    const configDir = this.app.vault.configDir;
-    const corePlugins = await this.readJson(`${configDir}/core-plugins.json`);
-    // Newer Obsidian saves { id: enabled }, older an array of enabled ids. Missing = the defaults (Daily notes on).
-    if (Array.isArray(corePlugins)) {
-      if (!corePlugins.includes("daily-notes")) return null;
-    } else if (corePlugins && typeof corePlugins === "object") {
-      if ((corePlugins as Record<string, unknown>)["daily-notes"] === false) return null;
-    }
-    return this.readJson(`${configDir}/daily-notes.json`);
-  }
-
-  private async readJson(path: string): Promise<unknown> {
-    try {
-      if (!(await this.app.vault.adapter.exists(path))) return null;
-      return JSON.parse(await this.app.vault.adapter.read(path)) as unknown;
-    } catch {
-      return null;
-    }
   }
 
   /**
@@ -112,7 +84,7 @@ export class MemoryStore {
    * `source` itself are skipped, so regenerating on a note does not build on what was just said about it:
    * "Again" starts from the impression as it was before this note, instead of folding the same note in twice.
    */
-  async load(use: MemoryUse, source: TFile, lineup: readonly CharacterSpec[]): Promise<LoadedMemory> {
+  async load(use: MemoryUse, source: NoteRef, lineup: readonly CharacterSpec[]): Promise<LoadedMemory> {
     await this.migrateLegacyMemos(use.folder, lineup);
     const memos: Record<SpeakerId, PromptMemo[]> = {};
     const impressions: Record<SpeakerId, PromptMemo> = {};
@@ -132,13 +104,13 @@ export class MemoryStore {
   }
 
   /** Entries of a memo-format file in `folder`, minus the ones whose heading links to `source`. */
-  private async entriesNotAbout(folder: string, name: string, source: TFile): Promise<MemoEntry[]> {
-    const path = normalizePath(`${folder}/${name}`);
-    const file = this.app.vault.getFileByPath(path);
+  private async entriesNotAbout(folder: string, name: string, source: NoteRef): Promise<MemoEntry[]> {
+    const path = normalizeVaultPath(`${folder}/${name}`);
+    const file = this.notes.get(path);
     if (!file) return [];
-    return parseMemo(await this.app.vault.cachedRead(file)).entries.filter((e) => {
+    return parseMemo(await this.notes.read(file)).entries.filter((e) => {
       const target = linkTarget(e.heading);
-      return !target || this.app.metadataCache.getFirstLinkpathDest(target, path)?.path !== source.path;
+      return !target || this.notes.resolveLink(target, path)?.path !== source.path;
     });
   }
 
@@ -148,10 +120,10 @@ export class MemoryStore {
    */
   private async migrateLegacyMemos(folder: string, lineup: readonly CharacterSpec[]): Promise<void> {
     for (const c of lineup) {
-      const legacy = this.app.vault.getFileByPath(normalizePath(`${folder}/${legacyMemoFileName(c.id)}`));
-      const target = normalizePath(`${folder}/${memoFileName(c.id, "diary")}`);
-      if (!legacy || this.app.vault.getAbstractFileByPath(target)) continue;
-      await this.app.fileManager.renameFile(legacy, target);
+      const legacy = this.notes.get(normalizeVaultPath(`${folder}/${legacyMemoFileName(c.id)}`));
+      const target = normalizeVaultPath(`${folder}/${memoFileName(c.id, "diary")}`);
+      if (!legacy || this.notes.isTaken(target)) continue;
+      await this.notes.rename(legacy, target);
     }
   }
 
@@ -162,7 +134,7 @@ export class MemoryStore {
    */
   async record(
     use: MemoryUse,
-    source: TFile,
+    source: NoteRef,
     lineup: readonly CharacterSpec[],
     memory: DialogueMemory,
     now: Date,
@@ -171,14 +143,14 @@ export class MemoryStore {
     const { folder, kind } = use;
     // Titles and notes of newly created memory files, and the character names in them, follow the launch language.
     const t = stringsFor(lang);
-    await this.ensureFolder(folder);
+    await this.notes.ensureFolder(folder);
     await this.migrateLegacyMemos(folder, lineup);
     const stamp = formatStamp(now);
     const date = formatDate(now);
     const replacesIn = (fromPath: string) => (headingOrLine: string) =>
       isSameNoteSameDay(headingOrLine, date, (target) => this.isLinkTo(target, fromPath, source));
 
-    const historyPath = normalizePath(`${folder}/${HISTORY_FILE}`);
+    const historyPath = normalizeVaultPath(`${folder}/${HISTORY_FILE}`);
     const historyLine = `- ${stamp} ${this.linkTo(source, historyPath)}${memory.summary ? ` ${memory.summary}` : ""}`;
     await this.upsert(historyPath, (existing) =>
       appendHistoryLine(existing, historyLine, `${t.historyTitle}\n\n${t.historyNote}`, {
@@ -189,16 +161,16 @@ export class MemoryStore {
     for (const c of lineup) {
       const name = charName(c, lang);
       for (const other of NOTE_KINDS) {
-        if (other !== kind) await this.removeToday(normalizePath(`${folder}/${memoFileName(c.id, other)}`), replacesIn);
+        if (other !== kind) await this.removeToday(normalizeVaultPath(`${folder}/${memoFileName(c.id, other)}`), replacesIn);
       }
-      await this.upsertEntry(normalizePath(`${folder}/${memoFileName(c.id, kind)}`), memory.notes[c.id], {
+      await this.upsertEntry(normalizeVaultPath(`${folder}/${memoFileName(c.id, kind)}`), memory.notes[c.id], {
         source,
         stamp,
         replacesIn,
         preamble: `${t.memoTitle(c.emoji, name, kind)}\n\n${t.memoNote(MEMORY_ENTRIES, kind)}`,
         max: MEMORY_ENTRIES,
       });
-      await this.upsertEntry(normalizePath(`${folder}/${impressionFileName(c.id)}`), memory.impressions[c.id], {
+      await this.upsertEntry(normalizeVaultPath(`${folder}/${impressionFileName(c.id)}`), memory.impressions[c.id], {
         source,
         stamp,
         replacesIn,
@@ -216,7 +188,7 @@ export class MemoryStore {
     path: string,
     body: string | undefined,
     o: {
-      source: TFile;
+      source: NoteRef;
       stamp: string;
       replacesIn: (fromPath: string) => (heading: string) => boolean;
       preamble: string;
@@ -240,34 +212,24 @@ export class MemoryStore {
     path: string,
     replacesIn: (fromPath: string) => (heading: string) => boolean,
   ): Promise<void> {
-    const file = this.app.vault.getFileByPath(path);
-    if (file) await this.app.vault.process(file, (data) => removeMemoEntries(data, replacesIn(path)));
+    const file = this.notes.get(path);
+    if (file) await this.notes.process(file, (data) => removeMemoEntries(data, replacesIn(path)));
   }
 
-  /** Whether a link target written in `fromPath` points at `file` (also after a rename, via the cache). */
-  private isLinkTo(target: string, fromPath: string, file: TFile): boolean {
-    if (target === this.app.metadataCache.fileToLinktext(file, fromPath)) return true;
-    return this.app.metadataCache.getFirstLinkpathDest(target, fromPath)?.path === file.path;
+  /** Whether a link target written in `fromPath` points at `note` (also after a rename, via link resolution). */
+  private isLinkTo(target: string, fromPath: string, note: NoteRef): boolean {
+    if (target === this.notes.linkText(note, fromPath)) return true;
+    return this.notes.resolveLink(target, fromPath)?.path === note.path;
   }
 
-  private linkTo(file: TFile, fromPath: string): string {
-    return `[[${this.app.metadataCache.fileToLinktext(file, fromPath)}]]`;
+  private linkTo(note: NoteRef, fromPath: string): string {
+    return `[[${this.notes.linkText(note, fromPath)}]]`;
   }
 
-  /** Vault.process reads and writes atomically, so a concurrent edit by the user is not lost. */
+  /** NoteStore.process reads and writes atomically, so a concurrent edit by the user is not lost. */
   private async upsert(path: string, update: (existing: string | null) => string): Promise<void> {
-    const file = this.app.vault.getFileByPath(path);
-    if (file) await this.app.vault.process(file, (data) => update(data));
-    else await this.app.vault.create(path, update(null));
-  }
-
-  private async ensureFolder(folder: string): Promise<void> {
-    let path = "";
-    for (const segment of folder.split("/")) {
-      path = path ? `${path}/${segment}` : segment;
-      if (this.app.vault.getFolderByPath(path)) continue;
-      if (this.app.vault.getAbstractFileByPath(path)) throw new Error(`Not a folder: ${path}`);
-      await this.app.vault.createFolder(path);
-    }
+    const file = this.notes.get(path);
+    if (file) await this.notes.process(file, (data) => update(data));
+    else await this.notes.create(path, update(null));
   }
 }

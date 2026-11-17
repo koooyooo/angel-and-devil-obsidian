@@ -682,6 +682,9 @@
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas: "angel devil" "log log";
   gap: 10px;
+  /* The character row is only as tall as its content, so leave room above it for the
+     tilted frames and the hop / loudness lift (up to 10px); .aad-stage clips overflow. */
+  padding-top: 14px;
 }
 .aad-mobile .aad-char.is-lead,
 .aad-mobile .aad-char.is-angel {

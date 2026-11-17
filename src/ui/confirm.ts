@@ -1,11 +1,6 @@
 import { App, Modal } from "obsidian";
 import type { Strings } from "../i18n";
-
-export interface TtsConfirmResult {
-  approved: boolean;
-  /** The user ticked "Don't ask again" and pressed OK. Always false when cancelled. */
-  dontAskAgain: boolean;
-}
+import type { TtsConfirmResult } from "./types";
 
 /**
  * Billing confirmation before calling Gemini TTS (F-6.2), same content as speak.py's confirm_tts_charge.

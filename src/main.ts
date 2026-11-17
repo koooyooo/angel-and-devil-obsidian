@@ -1,11 +1,18 @@
 import { MarkdownView, Notice, Platform, Plugin, addIcon } from "obsidian";
-import { DialogueController } from "./controller";
+import { DialogueController, type LaunchMode } from "./controller";
 import { GeminiClient } from "./gemini/client";
 import { DialogueGenerator } from "./gemini/generator";
 import { TtsService } from "./gemini/tts";
-import { runtimeLanguage, stringsFor, t } from "./i18n";
+import { runtimeLanguage, stringsFor } from "./i18n";
 import { MemoryStore } from "./memory-store";
-import { AadSettingTab, AadSettings, ApiKeyStore, mergeSettings } from "./settings";
+import { obsidianEnvironment, t } from "./platform/obsidian/environment";
+import { obsidianHttpClient } from "./platform/obsidian/http";
+import { ObsidianDailyNoteRules, ObsidianNoteStore } from "./platform/obsidian/notes";
+import { ObsidianSecretStore } from "./platform/obsidian/secrets";
+import { ObsidianDialogueUi, obsidianNotifier } from "./platform/obsidian/ui";
+import type { Environment, HttpClient, SettingsStore } from "./ports";
+import { AadSettingTab } from "./settings";
+import { type AadSettings, mergeSettings } from "./settings-model";
 import { NoteWriter } from "./writer";
 
 const ICON = "angel-and-devil";
@@ -28,11 +35,11 @@ const ICON_VOICE_SVG = [
 
 export default class AngelDevilPlugin extends Plugin {
   override settings!: AadSettings;
-  keys!: ApiKeyStore;
-  generator!: DialogueGenerator;
-  tts!: TtsService;
-  writer!: NoteWriter;
-  memory!: MemoryStore;
+  readonly env: Environment = obsidianEnvironment();
+  readonly http: HttpClient = obsidianHttpClient;
+  /** this.settings behind the SettingsStore port, for code that should not see the plugin. */
+  readonly settingsStore: SettingsStore = { get: () => this.settings, save: () => this.saveSettings() };
+  keys!: ObsidianSecretStore;
   private controller!: DialogueController;
 
   private ribbonEl: HTMLElement | null = null;
@@ -43,14 +50,21 @@ export default class AngelDevilPlugin extends Plugin {
 
   override async onload(): Promise<void> {
     this.settings = mergeSettings(await this.loadData());
-    this.keys = new ApiKeyStore(this.app, this);
+    this.keys = new ObsidianSecretStore(this.app, this.settingsStore);
     await this.keys.migrate();
-    const client = new GeminiClient(() => this.keys.get());
-    this.generator = new DialogueGenerator(client);
-    this.tts = new TtsService(client);
-    this.writer = new NoteWriter(this.app);
-    this.memory = new MemoryStore(this.app, () => this.settings.memory);
-    this.controller = new DialogueController(this);
+    const client = new GeminiClient(this.http, () => this.keys.get());
+    const notes = new ObsidianNoteStore(this.app);
+    this.controller = new DialogueController({
+      settings: this.settingsStore,
+      secrets: this.keys,
+      generator: new DialogueGenerator(client),
+      tts: new TtsService(client),
+      writer: new NoteWriter(notes),
+      memory: new MemoryStore(notes, new ObsidianDailyNoteRules(this.app), () => this.settings.memory),
+      ui: new ObsidianDialogueUi(this.app, this.manifest.id),
+      notifier: obsidianNotifier,
+      env: this.env,
+    });
 
     addIcon(ICON, ICON_SVG);
     addIcon(ICON_VOICE, ICON_VOICE_SVG);
@@ -63,7 +77,7 @@ export default class AngelDevilPlugin extends Plugin {
       checkCallback: (checking) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view) return false;
-        if (!checking) void this.controller.start(view);
+        if (!checking) this.startFrom(view);
         return true;
       },
     });
@@ -75,7 +89,7 @@ export default class AngelDevilPlugin extends Plugin {
       checkCallback: (checking) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || !this.settings.tts.enabled) return false;
-        if (!checking) void this.controller.start(view, "voice");
+        if (!checking) this.startFrom(view, "voice");
         return true;
       },
     });
@@ -101,8 +115,22 @@ export default class AngelDevilPlugin extends Plugin {
 
   private startFromActive(): void {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (view) void this.controller.start(view);
-    else new Notice(stringsFor(runtimeLanguage(this.settings.language)).noNote);
+    if (view) this.startFrom(view);
+    else this.noticeNoNote();
+  }
+
+  /** Launches on the note open in `view`: what goes to the controller is the note, its text and the selection. */
+  private startFrom(view: MarkdownView, mode: LaunchMode = "text"): void {
+    const note = view.file;
+    if (!note) {
+      this.noticeNoNote();
+      return;
+    }
+    void this.controller.start({ note, text: view.editor.getValue(), selection: view.editor.getSelection() }, mode);
+  }
+
+  private noticeNoNote(): void {
+    new Notice(stringsFor(runtimeLanguage(this.settings.language, this.env.uiLanguage)).noNote);
   }
 
   /** Header buttons on every Markdown view (F-1.1). The read-aloud launcher is only shown while TTS is on. */
@@ -112,13 +140,13 @@ export default class AngelDevilPlugin extends Plugin {
       const view = leaf.view;
       if (!(view instanceof MarkdownView)) continue;
       if (!this.headerActions.has(view)) {
-        const el = view.addAction(ICON, t.actionTitle, () => void this.controller.start(view));
+        const el = view.addAction(ICON, t.actionTitle, () => this.startFrom(view));
         this.headerActions.set(view, el);
         this.viewsWithAction.add(view);
       }
       const voiceEl = this.voiceActions.get(view);
       if (voiceOn && !voiceEl) {
-        this.voiceActions.set(view, view.addAction(ICON_VOICE, t.actionTitleVoice, () => void this.controller.start(view, "voice")));
+        this.voiceActions.set(view, view.addAction(ICON_VOICE, t.actionTitleVoice, () => this.startFrom(view, "voice")));
         this.viewsWithAction.add(view);
       } else if (!voiceOn && voiceEl) {
         voiceEl.remove();

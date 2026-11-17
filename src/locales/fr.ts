@@ -3,8 +3,6 @@ import type { Strings } from "../i18n";
 // French UI strings. Machine-drafted; native review welcome.
 export const fr: Strings = {
   pluginName: "Ange & Démon",
-  angel: "Ange",
-  devil: "Démon",
   commandStart: "Lancer le dialogue",
   actionTitle: "Dialogue Ange & Démon",
   thinking: "Lecture de votre note…",
@@ -98,10 +96,8 @@ export const fr: Strings = {
     "Lance la lecture dès que le dialogue s’affiche. Une confirmation est toujours demandée tant que « Confirmer à chaque fois » est activé.",
   setTtsSpeedJa: "Vitesse de lecture (japonais)",
   setTtsSpeedEn: "Vitesse de lecture (anglais et autres langues)",
-  setTtsVoiceAngel: "Voix de l’Ange",
-  setTtsVoiceDevil: "Voix du Démon",
-  setTtsStyleAngel: "Façon de parler de l’Ange",
-  setTtsStyleDevil: "Façon de parler du Démon",
+  setTtsVoice: (name: string) => `Voix : ${name}`,
+  setTtsStyle: (name: string) => `Façon de parler : ${name}`,
   setTtsStyleDesc: "L’anglais fonctionne le mieux (ex. : warm, bright, polite).",
   setMemoryHeading: "Mémoire",
   setMemoryEnabled: "Se souvenir des dialogues",

@@ -12,9 +12,29 @@ Status: **Phase 2 in progress** — text banter, animated modal, save to note, a
 
 ## Installation
 
-### Option 1: Install script (from GitHub Releases)
+The plugin is not in Obsidian's community plugin directory yet, so use one of the options below. **Option 1 (BRAT)** is recommended: it works on Windows, macOS, Linux, and mobile.
 
-Download the latest release directly into your Obsidian vault (`data.json` settings are preserved on updates):
+### Option 1: BRAT (recommended, auto-updates)
+
+Works entirely inside Obsidian on Windows / macOS / Linux / iOS / Android.
+
+1. Open **Settings → Community plugins** and turn off **Restricted mode** if needed.
+2. Press **Browse**, search for [BRAT](https://github.com/TfTHacker/obsidian42-brat), install it, and enable it.
+3. Open **Settings → BRAT → Add Beta plugin** and enter `koooyooo/angel-and-devil-obsidian`.
+4. Enable **Angel & Devil** under **Settings → Community plugins**.
+
+### Option 2: Manual install (without BRAT)
+
+Do this on a computer (Windows / macOS / Linux). To update, repeat the steps for each release.
+
+1. Download `angel-and-devil.zip` from the [latest GitHub Release](https://github.com/koooyooo/angel-and-devil-obsidian/releases/latest) and extract it (Windows: right-click → **Extract All**; macOS: double-click). You get an `angel-and-devil` folder with `main.js`, `manifest.json`, and `styles.css`.
+2. In **Settings → Community plugins**, press the folder icon next to "Installed plugins" to open `<vault>/.obsidian/plugins/`, and move the whole `angel-and-devil` folder into it (you should end up with `<vault>/.obsidian/plugins/angel-and-devil/main.js`).
+   - macOS Finder hides `.obsidian`; press `Cmd` + `Shift` + `.` to show it. Create the `plugins` folder if it does not exist.
+3. Press the reload icon next to "Installed plugins" and enable **Angel & Devil**.
+
+### Option 3: Install script (macOS / Linux, for developers)
+
+Download the latest release directly into your Obsidian vault (`data.json` settings are preserved on updates). **It does not work on Windows.**
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/main/install.sh | sh -s -- /path/to/your/vault
@@ -28,26 +48,14 @@ curl -fsSL https://raw.githubusercontent.com/koooyooo/angel-and-devil-obsidian/m
 
 Then in Obsidian: **Settings → Community plugins** → turn off **Restricted mode** if needed, and enable **Angel & Devil** (if updating, turn the plugin off and on again or reload Obsidian).
 
-### Option 2: BRAT (auto-updates)
-
-1. Install the [BRAT](https://github.com/TfTHacker/obsidian42-brat) community plugin in Obsidian.
-2. Open **Settings → BRAT → Add Beta plugin** and enter `koooyooo/angel-and-devil-obsidian`.
-3. Enable **Angel & Devil** under **Settings → Community plugins**.
-
-### Option 3: Manual download
-
-1. Download `angel-and-devil.zip` (or `main.js`, `manifest.json`, and `styles.css`) from the [latest GitHub Release](https://github.com/koooyooo/angel-and-devil-obsidian/releases/latest).
-2. Extract `main.js`, `manifest.json`, and `styles.css` into `<vault>/.obsidian/plugins/angel-and-devil/`.
-3. Enable **Angel & Devil** under **Settings → Community plugins**.
-
 ## Usage
 
 1. Get a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey) and enter it in **Settings → Angel & Devil**. Use **Check key** to confirm it works.
 2. Open a note and press the 😇😈 button in the note header (or the ribbon icon, or the command **Angel & Devil: Start banter**). Select text first to banter about just that part.
 3. Click / tap or press Space to advance, **Skip** to show everything, **Again** to regenerate, **Save to end of note** to append the banter as a quote block.
    - When the banter is over, you can **say one thing back** in the box below it. The Devil answers first and the Angel has the last word (one exchange, once per banter). Your line and their answer are included when you save; if you had already saved, the saved block is updated. The box can be hidden in the settings (**Show the reply box**).
-4. Optional: turn on **Read aloud** in the settings to get a 🔊 button. You are asked before every Gemini TTS call (can be turned off); replaying the same banter uses a local cache and makes no request.
-5. Optional: turn on **Remember banters** in the settings. After every banter (saving is not needed), both characters leave a memo and rewrite their overall impression of you. Later banters build on them: the pair can refer back, and avoids repeating a point it has already made. Another banter on the same note on the same day (for example **Again**) replaces that day's record. Everything is kept as ordinary notes in a vault folder (default `_angel_and_devil/`, configurable):
+4. Recommended: turn on **Enable read aloud** in the settings (off by default) to get a 🔊 button — the two voices and the characters reacting to them are much of the fun. Mind the cost: audio can cost more than text, so you are asked before every Gemini TTS call (can be turned off); replaying the same banter uses a local cache and makes no request.
+5. Recommended: turn on **Remember banters** in the settings (off by default). This is what makes the pair get better the longer you use it, and it makes no extra Gemini calls — the memos come back with the banter itself. After every banter (saving is not needed), both characters leave a memo and rewrite their overall impression of you. Later banters build on them: the pair can refer back, and avoids repeating a point it has already made. Another banter on the same note on the same day (for example **Again**) replaces that day's record. Everything is kept as ordinary notes in a vault folder (default `_angel_and_devil/`, configurable):
    - `history.md`: one line per note and day, with a link to the note.
    - `angel_memo_diary.md` / `devil_memo_diary.md`: each character's memos about diary notes (what happened, what they said, what to check next); only the latest 10 are kept. Edit or delete them freely.
    - `angel_memo_content.md` / `devil_memo_content.md`: the same for other notes — articles, book notes, ideas (what the note was about, what it shows about your interests, what they said); the latest 10.
@@ -89,7 +97,7 @@ npm test        # unit tests (Vitest)
 
 Copy or symlink `main.js`, `manifest.json`, `styles.css` into `<vault>/.obsidian/plugins/angel-and-devil/`, turn off restricted mode, and enable the plugin. Sample notes for manual testing are in `test/fixtures/notes/`.
 
-The persona prompts in `src/prompts/angel.md` and `devil.md` come from the CLI / Agent Skill version, [dot-agent-angel-and-devil](https://github.com/koooyooo/dot-agent-angel-and-devil) (`skills/angel-and-devil-note/references/`).
+The persona prompts in `src/characters/<id>/persona.md` come from the CLI / Agent Skill version, [dot-agent-angel-and-devil](https://github.com/koooyooo/dot-agent-angel-and-devil) (`skills/angel-and-devil-note/references/`).
 
 ## License
 

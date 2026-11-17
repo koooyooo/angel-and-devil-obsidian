@@ -4,45 +4,10 @@ import type { GeminiError } from "../gemini/errors";
 import { USER_EMOJI, spokenTurns } from "../format";
 import type { Strings } from "../i18n";
 import { REPLY_MAX_CHARS, normalizeReply } from "../input";
-import type { CharacterSpec, Dialogue, Lang, RevealSpeed, SlotRole, SpeakerId, Turn } from "../types";
+import type { CharacterSpec, Dialogue, SlotRole, SpeakerId, Turn } from "../types";
 import { revealDelay, scrollTopToReveal } from "./bubbles";
 import { loadingTips } from "./loading-tips";
-
-/** Callbacks to the controller. The modal never calls the generator, writer, etc. itself (design doc §2.2). */
-export interface ModalHandlers {
-  onSave(): void;
-  onRetry(): void;
-  onRegenerate(): void;
-  onOpenSettings(): void;
-  onSpeak(): void;
-  onStopAudio(): void;
-  /** The user sent their one reply (already normalized, never empty). */
-  onReply(text: string): void;
-  onClose(): void;
-}
-
-export interface ModalOptions {
-  animation: boolean;
-  revealSpeed: RevealSpeed;
-  /** Shows the Read aloud button (Phase 2). */
-  tts: boolean;
-  /** Shows the reply box once the banter is done (feature: reply). */
-  reply: boolean;
-  lineup?: readonly [CharacterSpec, CharacterSpec];
-  /** Strings and language of the launch (the plugin's language setting; see runtimeLanguage in i18n.ts). */
-  strings: Strings;
-  lang: Lang;
-}
-
-/**
- * How bubbles appear:
- * - "timer": one by one on a timer (click / Space to advance) — text mode.
- * - "audio": one by one as the voice reaches each turn — read-aloud launch.
- */
-export type RevealMode = "timer" | "audio";
-
-/** Loading screen steps. "voice" is only shown for the read-aloud launch. */
-export type LoadingStep = "write" | "voice";
+import type { AudioState, DialogueView, LoadingStep, ModalHandlers, ModalOptions, RevealMode } from "./types";
 
 type State = "loading" | "revealing" | "done" | "error" | "replyLoading";
 
@@ -61,8 +26,6 @@ function logItems(dialogue: Dialogue): LogItem[] {
   }
   return items;
 }
-export type AudioState = "idle" | "loading" | "playing" | "ended";
-
 const TIP_INTERVAL_MS = 6000;
 
 interface CharSlotView {
@@ -73,7 +36,7 @@ interface CharSlotView {
 }
 
 /** DialogueModal (design doc §2.2, §5.7): the stage, the bubbles, and the buttons. */
-export class DialogueModal extends Modal {
+export class DialogueModal extends Modal implements DialogueView {
   private state: State = "loading";
   private revealMode: RevealMode = "timer";
   private dialogue: Dialogue | null = null;
@@ -375,10 +338,9 @@ export class DialogueModal extends Modal {
 
   // --- internals ---
 
+  /** Name under the avatar, in the launch's language like the rest of the screen. */
   private displayLabel(spec: CharacterSpec): string {
-    if (spec.id === "angel") return this.s.angel;
-    if (spec.id === "devil") return this.s.devil;
-    return charName(spec, this.dialogue?.language ?? "ja");
+    return charName(spec, this.options.lang);
   }
 
   private applyThemeVars(el: HTMLElement, spec: CharacterSpec): void {
@@ -432,8 +394,8 @@ export class DialogueModal extends Modal {
     const [leadSpec, counterSpec] = this.lineup;
     if (speakerId === counterSpec.id) return { spec: counterSpec, role: "counter" };
     if (speakerId === leadSpec.id) return { spec: leadSpec, role: "lead" };
-    const fallback = BUILTIN_CHARACTERS[speakerId] ?? leadSpec;
-    return { spec: fallback, role: speakerId === "devil" ? "counter" : "lead" };
+    // Validation drops speakers outside the lineup, so this is only a guard.
+    return { spec: BUILTIN_CHARACTERS[speakerId] ?? leadSpec, role: "lead" };
   }
 
   private appendItem(position: number): void {

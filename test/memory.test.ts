@@ -25,7 +25,7 @@ import {
   toPromptImpression,
   toPromptMemo,
 } from "../src/memory";
-import { mergeSettings } from "../src/settings";
+import { mergeSettings } from "../src/settings-model";
 
 const PREAMBLE = "# 😇 Angel's memos\n\n%% note %%";
 

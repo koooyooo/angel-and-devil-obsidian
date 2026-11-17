@@ -1,4 +1,4 @@
-import { requestUrl } from "obsidian";
+import type { HttpClient } from "../ports";
 import { GeminiError, extractText, mapHttpError } from "./errors";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -7,11 +7,14 @@ export const REQUEST_TIMEOUT_MS = 60_000;
 export const TTS_TIMEOUT_MS = 180_000;
 
 /**
- * Thin wrapper around Obsidian's requestUrl (design doc §5.5).
- * requestUrl avoids CORS and works on mobile; the key goes in a header, never in the URL.
+ * Thin client for the Gemini REST API (design doc §5.5), over the app's HttpClient (requestUrl in Obsidian,
+ * which avoids CORS and works on mobile). The key goes in a header, never in the URL.
  */
 export class GeminiClient {
-  constructor(private readonly getApiKey: () => string) {}
+  constructor(
+    private readonly http: HttpClient,
+    private readonly getApiKey: () => string,
+  ) {}
 
   async generateContent(model: string, body: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> {
     return this.request("POST", `/models/${encodeURIComponent(model)}:generateContent`, body, timeoutMs);
@@ -35,38 +38,39 @@ export class GeminiClient {
     const apiKey = this.getApiKey().trim();
     if (!apiKey) throw new GeminiError("invalid_key");
 
-    const call = requestUrl({
-      url: `${BASE}${path}`,
-      method,
-      headers: { "x-goog-api-key": apiKey },
-      contentType: body === undefined ? undefined : "application/json",
-      body: body === undefined ? undefined : JSON.stringify(body),
-      throw: false,
-    }).then(
-      (res) => {
-        let json: unknown;
-        try {
-          json = res.json;
-        } catch {
-          json = undefined;
-        }
-        if (res.status >= 400) throw mapHttpError(res.status, json);
-        return json;
-      },
-      () => {
-        throw new GeminiError("network");
-      },
-    );
+    const call = this.http
+      .request({
+        url: `${BASE}${path}`,
+        method,
+        headers: { "x-goog-api-key": apiKey },
+        contentType: body === undefined ? undefined : "application/json",
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+      .then(
+        (res) => {
+          let json: unknown;
+          try {
+            json = JSON.parse(res.text) as unknown;
+          } catch {
+            json = undefined;
+          }
+          if (res.status >= 400) throw mapHttpError(res.status, json);
+          return json;
+        },
+        () => {
+          throw new GeminiError("network");
+        },
+      );
 
-    // requestUrl has no timeout or abort; stop waiting after the limit (design doc §5.5).
-    let timer: number | undefined;
+    // HttpClient has no timeout or abort (requestUrl has neither); stop waiting after the limit (design doc §5.5).
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = window.setTimeout(() => reject(new GeminiError("timeout")), timeoutMs);
+      timer = setTimeout(() => reject(new GeminiError("timeout")), timeoutMs);
     });
     try {
       return await Promise.race([call, timeout]);
     } finally {
-      window.clearTimeout(timer);
+      clearTimeout(timer);
     }
   }
 }

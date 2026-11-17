@@ -1,245 +1,13 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
-import { ANGEL_SPEC, DEVIL_SPEC } from "./characters";
-import { DEFAULT_HEADING_TEMPLATE, LEGACY_HEADING_TEMPLATES } from "./format";
+import { charName, resolveLineup } from "./characters";
 import { GeminiClient } from "./gemini/client";
 import { toGeminiError } from "./gemini/errors";
-import { t } from "./i18n";
-import { LANGUAGES, isSupportedLanguage } from "./lang";
+import { LANGUAGES } from "./lang";
 import { DEFAULT_MEMORY_FOLDER, normalizeMemoryFolder } from "./memory";
-import type { Lang, RevealSpeed, Rounds, SpeakerId, VendorId } from "./types";
 import type AngelDevilPlugin from "./main";
-
-export const CURRENT_SCHEMA_VERSION = 1;
-
-export interface AadSettings {
-  /** Monotonically increasing integer; bumped only on breaking schema changes (ADR-0003). */
-  schemaVersion: number;
-  /** Only used when SecretStorage is unavailable (Obsidian < 1.11.4). */
-  apiKey: string;
-  textVendor: VendorId;
-  textModel: string;
-  language: "auto" | Lang;
-  rounds: Rounds;
-  /** Two-slot character lineup `[leadId, counterId]`. Defaults to `["angel", "devil"]`. */
-  lineup: [SpeakerId, SpeakerId];
-  animation: boolean;
-  revealSpeed: RevealSpeed;
-  headingTemplate: string;
-  showRibbon: boolean;
-  showStatusBar: boolean;
-  maxInputChars: number;
-  tts: TtsSettings;
-  memory: MemorySettings;
-  reply: ReplySettings;
-}
-
-/** One reply from the user after a banter (feature: reply). On by default. */
-export interface ReplySettings {
-  enabled: boolean;
-}
-
-/** Memory across banters (ADR-0004). Off by default; the files live in a visible vault folder. */
-export interface MemorySettings {
-  enabled: boolean;
-  /** Vault-relative folder. Never a dot folder (see normalizeMemoryFolder). */
-  folder: string;
-}
-
-export interface TtsSettings {
-  enabled: boolean;
-  vendor: VendorId;
-  model: string;
-  confirmEveryTime: boolean;
-  autoplay: boolean;
-  speed: Record<Lang, number>;
-  voices: Record<SpeakerId, string>;
-  styles: Record<SpeakerId, string>;
-}
-
-/** Prebuilt Gemini TTS voices (dot-agent skill: references/Voices.md). */
-export const VOICES = [
-  "Achernar", "Achird", "Algenib", "Algieba", "Alnilam", "Aoede", "Autonoe", "Callirrhoe", "Charon", "Despina",
-  "Enceladus", "Erinome", "Fenrir", "Gacrux", "Iapetus", "Kore", "Laomedeia", "Leda", "Orus", "Pulcherrima",
-  "Puck", "Rasalgethi", "Sadachbia", "Sadaltager", "Schedar", "Sulafat", "Umbriel", "Vindemiatrix", "Zephyr",
-  "Zubenelgenubi",
-] as const;
-
-export const DEFAULT_SETTINGS: AadSettings = {
-  schemaVersion: CURRENT_SCHEMA_VERSION,
-  apiKey: "",
-  textVendor: "gemini",
-  // Alias that follows Google's current Flash model (PRD §12.2: the default is still to be decided).
-  textModel: "gemini-flash-latest",
-  language: "auto",
-  rounds: "auto",
-  lineup: [ANGEL_SPEC.id, DEVIL_SPEC.id],
-  animation: true,
-  revealSpeed: "normal",
-  headingTemplate: DEFAULT_HEADING_TEMPLATE,
-  showRibbon: true,
-  showStatusBar: false,
-  maxInputChars: 20_000,
-  // Defaults mirror the CLI skill's settings.yaml.
-  tts: {
-    enabled: false,
-    vendor: "gemini",
-    model: "gemini-3.8-flash-tts",
-    confirmEveryTime: true,
-    autoplay: false,
-    speed: { ja: 1.2, en: 1.1 },
-    voices: { [ANGEL_SPEC.id]: ANGEL_SPEC.defaultVoice, [DEVIL_SPEC.id]: DEVIL_SPEC.defaultVoice },
-    styles: {
-      [ANGEL_SPEC.id]: ANGEL_SPEC.defaultStyle,
-      [DEVIL_SPEC.id]: DEVIL_SPEC.defaultStyle,
-    },
-  },
-  memory: {
-    enabled: false,
-    folder: DEFAULT_MEMORY_FOLDER,
-  },
-  reply: {
-    enabled: true,
-  },
-};
-
-function isValidLineup(value: unknown): value is [SpeakerId, SpeakerId] {
-  return (
-    Array.isArray(value) &&
-    value.length === 2 &&
-    typeof value[0] === "string" &&
-    typeof value[1] === "string" &&
-    value[0].trim().length > 0 &&
-    value[1].trim().length > 0 &&
-    value[0] !== value[1]
-  );
-}
-
-/** Deep-merges saved data over the defaults so new fields appear after an update (design doc §4.1, ADR-0003). */
-export function mergeSettings(saved: unknown): AadSettings {
-  const s = saved && typeof saved === "object" ? (saved as Partial<AadSettings>) : {};
-  const d = DEFAULT_SETTINGS.tts;
-  const tts = (s.tts ?? {}) as Partial<TtsSettings>;
-  const schemaVersion =
-    typeof s.schemaVersion === "number" && Number.isInteger(s.schemaVersion) && s.schemaVersion >= 1
-      ? s.schemaVersion
-      : CURRENT_SCHEMA_VERSION;
-  const textVendor =
-    typeof s.textVendor === "string" && s.textVendor.trim().length > 0
-      ? s.textVendor.trim()
-      : DEFAULT_SETTINGS.textVendor;
-  const lineup: [SpeakerId, SpeakerId] = isValidLineup(s.lineup)
-    ? [s.lineup[0], s.lineup[1]]
-    : [...DEFAULT_SETTINGS.lineup];
-  const ttsVendor =
-    typeof tts.vendor === "string" && tts.vendor.trim().length > 0 ? tts.vendor.trim() : d.vendor;
-  const memory = (s.memory ?? {}) as Partial<MemorySettings>;
-  const reply = (s.reply ?? {}) as Partial<ReplySettings>;
-  const memoryFolder =
-    (typeof memory.folder === "string" && normalizeMemoryFolder(memory.folder)) || DEFAULT_SETTINGS.memory.folder;
-
-  return {
-    ...DEFAULT_SETTINGS,
-    ...s,
-    schemaVersion,
-    textVendor,
-    language: isSupportedLanguage(s.language) ? s.language : "auto",
-    // Earlier defaults had a fixed title; treat them as "not customized" so the title follows the language.
-    headingTemplate:
-      typeof s.headingTemplate !== "string" || LEGACY_HEADING_TEMPLATES.includes(s.headingTemplate)
-        ? DEFAULT_SETTINGS.headingTemplate
-        : s.headingTemplate,
-    lineup,
-    tts: {
-      ...d,
-      ...tts,
-      vendor: ttsVendor,
-      speed: { ...d.speed, ...(tts.speed ?? {}) },
-      voices: { ...d.voices, ...(tts.voices ?? {}) },
-      styles: { ...d.styles, ...(tts.styles ?? {}) },
-    },
-    memory: {
-      enabled: memory.enabled === true,
-      folder: memoryFolder,
-    },
-    reply: {
-      enabled: reply.enabled !== false,
-    },
-  };
-}
-
-const SECRET_ID = "angel-and-devil-gemini-api-key";
-
-interface SecretStorageLike {
-  getSecret(id: string): string | null;
-  setSecret(id: string, secret: string): void;
-}
-
-/** API key storage (design doc §5.3): SecretStorage when the app has it, data.json otherwise. */
-export class ApiKeyStore {
-  constructor(
-    private readonly app: App,
-    private readonly plugin: AngelDevilPlugin,
-  ) {}
-
-  private get secrets(): SecretStorageLike | undefined {
-    const s = (this.app as App & { secretStorage?: SecretStorageLike }).secretStorage;
-    return s && typeof s.getSecret === "function" ? s : undefined;
-  }
-
-  get usesSecretStorage(): boolean {
-    return this.secrets !== undefined;
-  }
-
-  /**
-   * Moves a plaintext key left in data.json (saved on an Obsidian without SecretStorage) into
-   * SecretStorage and clears it from data.json. Runs on every load; a no-op once migrated.
-   */
-  async migrate(): Promise<void> {
-    const secrets = this.secrets;
-    const plain = this.plugin.settings.apiKey;
-    if (!secrets || !plain) return;
-    // A key already in SecretStorage wins: it was entered later than the plaintext one.
-    if (!secrets.getSecret(SECRET_ID)) secrets.setSecret(SECRET_ID, plain);
-    this.plugin.settings.apiKey = "";
-    await this.plugin.saveSettings();
-  }
-
-  get(): string {
-    const secrets = this.secrets;
-    if (secrets) return secrets.getSecret(SECRET_ID) ?? "";
-    return this.plugin.settings.apiKey;
-  }
-
-  has(): boolean {
-    return this.get().trim().length > 0;
-  }
-
-  /** Last four characters, for "saved (••••abcd)" — never the whole key. */
-  hint(): string {
-    const key = this.get().trim();
-    return key.length > 8 ? key.slice(-4) : "";
-  }
-
-  async set(value: string): Promise<void> {
-    const secrets = this.secrets;
-    if (secrets) {
-      secrets.setSecret(SECRET_ID, value);
-      // Never keep a plaintext copy once the secret store is available.
-      if (this.plugin.settings.apiKey) {
-        this.plugin.settings.apiKey = "";
-        await this.plugin.saveSettings();
-      }
-      return;
-    }
-    this.plugin.settings.apiKey = value;
-    await this.plugin.saveSettings();
-  }
-
-  /** SecretStorage has no delete; an empty value means "not set". */
-  async clear(): Promise<void> {
-    await this.set("");
-  }
-}
+import { t, uiLang } from "./platform/obsidian/environment";
+import { type AadSettings, DEFAULT_SETTINGS, VOICES, apiKeyHint, hasApiKey } from "./settings-model";
+import type { RevealSpeed } from "./types";
 
 export class AadSettingTab extends PluginSettingTab {
   constructor(
@@ -257,19 +25,19 @@ export class AadSettingTab extends PluginSettingTab {
     // The saved key is never put back into the input (it would be readable from the DOM).
     // The field is only for entering a new key; "Save" stores it and clears the field.
     const keys = this.plugin.keys;
-    const saved = keys.has();
+    const saved = hasApiKey(keys.get());
     // The row keeps only the name so the input and buttons have room;
     // status and the short explanation go in a note right below it.
     const keySetting = new Setting(containerEl).setName(t.setApiKey);
     const keyNote = containerEl.createDiv({ cls: "aad-key-note setting-item-description" });
     keyNote.createDiv({
       cls: "aad-key-status",
-      text: saved ? t.setApiKeySaved(keys.hint()) : t.setApiKeyNotSaved,
+      text: saved ? t.setApiKeySaved(apiKeyHint(keys.get())) : t.setApiKeyNotSaved,
     });
     const keyInfo = keyNote.createDiv();
     keyInfo.createEl("a", { text: t.setGetKey, href: "https://aistudio.google.com/apikey" });
     keyInfo.appendText(` · ${t.setApiKeyDesc} · `);
-    keyInfo.appendText(keys.usesSecretStorage ? t.setApiKeyStoredSecret : t.setApiKeyStoredPlain);
+    keyInfo.appendText(keys.secure ? t.setApiKeyStoredSecret : t.setApiKeyStoredPlain);
     let input: HTMLInputElement | null = null;
     const saveKey = async () => {
       const value = input?.value.trim() ?? "";
@@ -303,7 +71,7 @@ export class AadSettingTab extends PluginSettingTab {
           button.setButtonText(t.setCheckKey).onClick(async () => {
             button.setDisabled(true);
             try {
-              await new GeminiClient(() => keys.get()).listModels();
+              await new GeminiClient(this.plugin.http, () => keys.get()).listModels();
               new Notice(t.setCheckOk);
             } catch (e) {
               new Notice(t[`err_${toGeminiError(e).kind}`]);
@@ -538,13 +306,13 @@ export class AadSettingTab extends PluginSettingTab {
       );
     }
 
-    for (const [who, voiceName, styleName] of [
-      ["angel", t.setTtsVoiceAngel, t.setTtsStyleAngel],
-      ["devil", t.setTtsVoiceDevil, t.setTtsStyleDevil],
-    ] as const) {
-      const currentVoice = tts.voices[who] ?? DEFAULT_SETTINGS.tts.voices[who];
-      const currentStyle = tts.styles[who] ?? DEFAULT_SETTINGS.tts.styles[who];
-      new Setting(containerEl).setName(voiceName).addDropdown((d) => {
+    // Voice and style for the two characters in the current lineup (names in Obsidian's UI language).
+    for (const spec of resolveLineup(this.plugin.settings.lineup)) {
+      const who = spec.id;
+      const name = charName(spec, uiLang);
+      const currentVoice = tts.voices[who] ?? spec.defaultVoice;
+      const currentStyle = tts.styles[who] ?? spec.defaultStyle;
+      new Setting(containerEl).setName(t.setTtsVoice(name)).addDropdown((d) => {
         for (const v of VOICES) d.addOption(v, v);
         if (!VOICES.includes(currentVoice as (typeof VOICES)[number])) d.addOption(currentVoice, currentVoice);
         d.setValue(currentVoice).onChange(async (value) => {
@@ -553,11 +321,11 @@ export class AadSettingTab extends PluginSettingTab {
         });
       });
       new Setting(containerEl)
-        .setName(styleName)
+        .setName(t.setTtsStyle(name))
         .setDesc(t.setTtsStyleDesc)
         .addText((text) =>
           text.setValue(currentStyle).onChange(async (value) => {
-            tts.styles[who] = value.trim() || DEFAULT_SETTINGS.tts.styles[who];
+            tts.styles[who] = value.trim() || spec.defaultStyle;
             await save();
           }),
         );

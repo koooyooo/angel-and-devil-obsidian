@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_HEADING_TEMPLATE, LEGACY_HEADING_TEMPLATES, renderHeading } from "../src/format";
-import { runtimeLanguage, stringsFor, t, uiLang } from "../src/i18n";
+import { runtimeLanguage, stringsFor } from "../src/i18n";
 import { LANGUAGE_CODES, uiLanguageFor } from "../src/lang";
 import { de } from "../src/locales/de";
 import { es } from "../src/locales/es";
 import { fr } from "../src/locales/fr";
 import { zhHans } from "../src/locales/zh-Hans";
 import { zhHant } from "../src/locales/zh-Hant";
-import { DEFAULT_SETTINGS, mergeSettings } from "../src/settings";
+import { DEFAULT_SETTINGS, mergeSettings } from "../src/settings-model";
 
 describe("uiLanguageFor", () => {
   it.each([
@@ -32,12 +32,8 @@ describe("uiLanguageFor", () => {
 });
 
 describe("locales", () => {
-  const reference = t; // English under the test stub
+  const reference = stringsFor("en");
   const locales = { zhHans, zhHant, fr, es, de };
-
-  it("uses English under the test stub", () => {
-    expect(uiLang).toBe("en");
-  });
 
   it.each(Object.entries(locales))("%s has no empty strings and as many tips as English", (_, strings) => {
     for (const [key, value] of Object.entries(strings)) {
@@ -48,22 +44,28 @@ describe("locales", () => {
   });
 
   it.each(Object.entries(locales))("%s formats the memory file headings", (_, strings) => {
-    expect(strings.memoTitle("😇", strings.angel, "diary")).toMatch(/^# 😇 /);
-    expect(strings.impressionTitle("😈", strings.devil)).toMatch(/^# 😈 /);
+    expect(strings.memoTitle("😇", "Angel", "diary")).toMatch(/^# 😇 /);
+    expect(strings.impressionTitle("😈", "Devil")).toMatch(/^# 😈 /);
     expect(strings.memoNote(30, "content")).toMatch(/^%% .*30.* %%$/);
     expect(strings.memoryUsed(2)).toContain("2");
+  });
+
+  it.each(Object.entries(locales))("%s puts the character name into the TTS voice / style labels", (_, strings) => {
+    expect(strings.setTtsVoice("Sage")).toContain("Sage");
+    expect(strings.setTtsStyle("Sage")).toContain("Sage");
   });
 });
 
 describe("runtimeLanguage", () => {
-  it("uses the plugin's language when fixed, and Obsidian's (en under the stub) for auto", () => {
-    expect(runtimeLanguage("es")).toBe("es");
-    expect(runtimeLanguage("zh-Hant")).toBe("zh-Hant");
-    expect(runtimeLanguage("auto")).toBe("en");
+  it("uses the plugin's language when fixed, and the app's UI language for auto", () => {
+    expect(runtimeLanguage("es", "ja")).toBe("es");
+    expect(runtimeLanguage("zh-Hant", "en")).toBe("zh-Hant");
+    expect(runtimeLanguage("auto", "en")).toBe("en");
+    expect(runtimeLanguage("auto", "ja")).toBe("ja");
   });
   it("hands out the matching strings", () => {
-    expect(stringsFor(runtimeLanguage("de")).tipLabel).toBe("Tipp");
-    expect(stringsFor("xx").tipLabel).toBe(t.tipLabel);
+    expect(stringsFor(runtimeLanguage("de", "en")).tipLabel).toBe("Tipp");
+    expect(stringsFor("xx").tipLabel).toBe(stringsFor("en").tipLabel);
   });
 });
 

@@ -1,21 +1,20 @@
-import { MarkdownView, Notice, TFile } from "obsidian";
 import { AudioPlayer } from "./audio/player";
 import { TurnTimeline } from "./audio/timeline";
 import { concatPcmToWav, extractPcm } from "./audio/wav";
 import { resolveLineup } from "./characters";
 import { spokenTurns, toMarkdown } from "./format";
 import { toGeminiError } from "./gemini/errors";
-import type { GenerateInput, ReplyResult } from "./gemini/generator";
+import type { DialogueGenerator, GenerateInput, ReplyResult } from "./gemini/generator";
 import { MAX_TURNS, MIN_TURNS, REPLY_TURNS } from "./gemini/schema";
-import { TTS_CHUNK_GAP_MS } from "./gemini/tts";
+import { TTS_CHUNK_GAP_MS, type TtsService } from "./gemini/tts";
 import { runtimeLanguage, stringsFor } from "./i18n";
 import { normalizeReply, prepareInput } from "./input";
-import type AngelDevilPlugin from "./main";
-import type { LoadedMemory, MemoryUse } from "./memory-store";
+import type { LoadedMemory, MemoryStore, MemoryUse } from "./memory-store";
+import type { DialogueUi, Environment, LaunchSource, NoteRef, Notifier, SecretStore, SettingsStore } from "./ports";
 import type { Strings } from "./i18n";
 import type { CharacterSpec, Dialogue, Lang } from "./types";
-import { confirmTts } from "./ui/confirm";
-import { DialogueModal } from "./ui/modal";
+import type { DialogueView } from "./ui/types";
+import type { NoteWriter } from "./writer";
 
 /**
  * - "text": show the banter first; reading aloud is an optional extra.
@@ -28,7 +27,7 @@ interface DialogueSession {
   /** Bumped on every generation; late results with an old id are discarded (design doc §5.2). */
   id: number;
   mode: LaunchMode;
-  sourceFile: TFile;
+  sourceFile: NoteRef;
   input: string;
   truncated: boolean;
   lineup: readonly [CharacterSpec, CharacterSpec];
@@ -51,6 +50,21 @@ interface DialogueSession {
   audio?: { key: string; wav: Uint8Array };
 }
 
+/** What the controller works with (doc/feature/platform-ports/dd.md §5). The plugin builds it in main.ts. */
+export interface ControllerDeps {
+  settings: SettingsStore;
+  secrets: Pick<SecretStore, "get">;
+  generator: DialogueGenerator;
+  tts: TtsService;
+  writer: NoteWriter;
+  memory: MemoryStore;
+  ui: DialogueUi;
+  notifier: Notifier;
+  env: Environment;
+  /** Replaced in tests. Defaults to new AudioPlayer(). */
+  createPlayer?: () => AudioPlayer;
+}
+
 /** Plugin-wide cache of the latest clips, keyed by dialogue + voice settings (design doc §5.9). */
 const AUDIO_CACHE_SIZE = 5;
 
@@ -60,54 +74,54 @@ const AUDIO_CACHE_SIZE = 5;
  */
 export class DialogueController {
   private session: DialogueSession | null = null;
-  private modal: DialogueModal | null = null;
+  private modal: DialogueView | null = null;
   private nextId = 1;
   private player: AudioPlayer | null = null;
   private speakToken = 0;
   private readonly audioCache = new Map<string, Uint8Array>();
   private memoryWrites: Promise<void> = Promise.resolve();
 
-  constructor(private readonly plugin: AngelDevilPlugin) {}
+  constructor(private readonly deps: ControllerDeps) {}
+
+  private get settings() {
+    return this.deps.settings.get();
+  }
 
   /** Language of everything a launch shows (the plugin's language setting; see runtimeLanguage). */
   private get lang(): Lang {
-    return runtimeLanguage(this.plugin.settings.language);
+    return runtimeLanguage(this.settings.language, this.deps.env.uiLanguage);
   }
 
   private get rt(): Strings {
     return stringsFor(this.lang);
   }
 
-  async start(view: MarkdownView, mode: LaunchMode = "text"): Promise<void> {
-    const file = view.file;
-    if (!file) {
-      new Notice(this.rt.noNote);
-      return;
-    }
-    const selection = view.editor.getSelection();
-    const prepared = prepareInput(selection || view.editor.getValue(), {
+  async start(source: LaunchSource, mode: LaunchMode = "text"): Promise<void> {
+    const file = source.note;
+    const selection = source.selection;
+    const prepared = prepareInput(selection || source.text, {
       fromSelection: selection.length > 0,
-      maxChars: this.plugin.settings.maxInputChars,
+      maxChars: this.settings.maxInputChars,
     });
     if (!prepared.ok) {
-      new Notice(this.rt.tooShort);
+      this.deps.notifier.notify(this.rt.tooShort);
       return;
     }
-    if (!this.plugin.keys.get().trim()) {
-      new Notice(this.rt.noKey);
+    if (!this.deps.secrets.get().trim()) {
+      this.deps.notifier.notify(this.rt.noKey);
       this.openSettings();
       return;
     }
-    if (mode === "voice" && !this.plugin.settings.tts.enabled) {
-      new Notice(this.rt.ttsOff);
+    if (mode === "voice" && !this.settings.tts.enabled) {
+      this.deps.notifier.notify(this.rt.ttsOff);
       return;
     }
 
     this.close();
     if (mode === "voice" && !(await this.approveVoice(`${MIN_TURNS}–${MAX_TURNS}`))) return;
 
-    const lineup = resolveLineup(this.plugin.settings.lineup);
-    const memoryUse = await this.plugin.memory.useFor(file).catch((e: unknown) => {
+    const lineup = resolveLineup(this.settings.lineup);
+    const memoryUse = await this.deps.memory.useFor(file).catch((e: unknown) => {
       console.warn("[angel-and-devil] could not decide whether to use memory", e);
       return null;
     });
@@ -122,8 +136,7 @@ export class DialogueController {
       replying: false,
       saved: false,
     };
-    this.modal = new DialogueModal(
-      this.plugin.app,
+    this.modal = this.deps.ui.openDialogue(
       {
         onSave: () => void this.save(),
         onRetry: () => void this.generate(),
@@ -135,16 +148,15 @@ export class DialogueController {
         onClose: () => this.discard(),
       },
       {
-        animation: this.plugin.settings.animation,
-        revealSpeed: this.plugin.settings.revealSpeed,
-        tts: this.plugin.settings.tts.enabled,
-        reply: this.plugin.settings.reply.enabled,
+        animation: this.settings.animation,
+        revealSpeed: this.settings.revealSpeed,
+        tts: this.settings.tts.enabled,
+        reply: this.settings.reply.enabled,
         lineup,
         strings: this.rt,
         lang: this.lang,
       },
     );
-    this.modal.open();
     await this.generate({ voiceApproved: mode === "voice" });
   }
 
@@ -173,11 +185,11 @@ export class DialogueController {
     session.audio = undefined;
     modal.showLoading({ voice });
 
-    const s = this.plugin.settings;
+    const s = this.settings;
     let memory: LoadedMemory | undefined;
     if (session.memory) {
       try {
-        memory = await this.plugin.memory.load(session.memory, session.sourceFile, session.lineup);
+        memory = await this.deps.memory.load(session.memory, session.sourceFile, session.lineup);
       } catch (e) {
         // Unreadable memory should not block the banter: go on without earlier memos.
         console.warn("[angel-and-devil] could not read memory", e);
@@ -198,7 +210,7 @@ export class DialogueController {
     };
     let dialogue: Dialogue;
     try {
-      dialogue = await this.plugin.generator.generate(input);
+      dialogue = await this.deps.generator.generate(input);
     } catch (e) {
       if (this.session?.id !== id) return;
       modal.showError(toGeminiError(e));
@@ -235,20 +247,20 @@ export class DialogueController {
     const session = this.session;
     if (!session?.dialogue || session.saved || session.savedBlock) return;
     const now = new Date();
-    const block = toMarkdown(session.dialogue, this.plugin.settings.headingTemplate, now, session.lineup);
+    const block = toMarkdown(session.dialogue, this.settings.headingTemplate, now, session.lineup);
     // Remembered before the write, so a reply that lands meanwhile still finds the block to replace.
     session.savedBlock = block;
     session.savedAt = now;
-    const result = await this.plugin.writer.append(session.sourceFile, block);
+    const result = await this.deps.writer.append(session.sourceFile, block);
     if (result === "not_found") {
       session.savedBlock = undefined;
       session.savedAt = undefined;
-      new Notice(this.rt.sourceMissing);
+      this.deps.notifier.notify(this.rt.sourceMissing);
       return;
     }
     session.saved = true;
     this.modal?.setSaved();
-    new Notice(this.rt.savedNotice);
+    this.deps.notifier.notify(this.rt.savedNotice);
   }
 
   /**
@@ -264,7 +276,7 @@ export class DialogueController {
     if (!text) return;
     session.replying = true;
 
-    const s = this.plugin.settings;
+    const s = this.settings;
     // Read-aloud launch: ask (and unlock audio on iOS) inside this click, before any other await.
     let voice = session.mode === "voice" && s.tts.enabled;
     if (voice) voice = await this.approveVoice(String(REPLY_TURNS));
@@ -275,7 +287,7 @@ export class DialogueController {
     modal.showReplyLoading(text);
     let result: ReplyResult;
     try {
-      result = await this.plugin.generator.reply({ base: session.lastInput, dialogue: before, replyText: text });
+      result = await this.deps.generator.reply({ base: session.lastInput, dialogue: before, replyText: text });
     } catch (e) {
       if (this.session?.id !== id) return;
       session.replying = false;
@@ -322,9 +334,9 @@ export class DialogueController {
     player.stop();
     // Unlock before the first await so it still counts as part of the click (iOS). With confirmation on,
     // the confirm dialog's OK click unlocks instead.
-    if (!this.plugin.settings.tts.confirmEveryTime) player.unlock();
+    if (!this.settings.tts.confirmEveryTime) player.unlock();
 
-    const key = await audioKey(dialogue, this.plugin.settings.tts);
+    const key = await audioKey(dialogue, this.settings.tts);
     const cached = session.audio?.key === key ? session.audio.wav : this.audioCache.get(key);
     if (!cached && !(await this.approveVoice(String(spokenTurns(dialogue).length)))) return;
     if (this.session !== session || this.speakToken !== token) return;
@@ -355,7 +367,7 @@ export class DialogueController {
   // --- internals ---
 
   private ensurePlayer(): AudioPlayer {
-    return (this.player ??= new AudioPlayer());
+    return (this.player ??= this.deps.createPlayer?.() ?? new AudioPlayer());
   }
 
   /**
@@ -363,14 +375,13 @@ export class DialogueController {
    * handler where possible, so the unlock still counts as part of the user gesture.
    */
   private async approveVoice(turns: string): Promise<boolean> {
-    const tts = this.plugin.settings.tts;
+    const tts = this.settings.tts;
     const player = this.ensurePlayer();
     if (!tts.confirmEveryTime) {
       player.unlock();
       return true;
     }
-    const { approved, dontAskAgain } = await confirmTts(
-      this.plugin.app,
+    const { approved, dontAskAgain } = await this.deps.ui.confirmTts(
       { model: tts.model, turns },
       () => player.unlock(),
       this.rt,
@@ -378,21 +389,21 @@ export class DialogueController {
     if (approved && dontAskAgain) {
       // Same effect as turning off "Confirm every time" in the settings tab, where it can be turned back on.
       tts.confirmEveryTime = false;
-      await this.plugin.saveSettings();
+      await this.deps.settings.save();
     }
     return approved;
   }
 
   /** Returns WAV for the dialogue (cache first), or null after showing a notice. */
   private async fetchAudio(session: DialogueSession, dialogue: Dialogue): Promise<Uint8Array | null> {
-    const tts = this.plugin.settings.tts;
+    const tts = this.settings.tts;
     const key = await audioKey(dialogue, tts);
     let wav = session.audio?.key === key ? session.audio.wav : this.audioCache.get(key);
     if (!wav) {
       try {
-        wav = await this.plugin.tts.synthesize(spokenTurns(dialogue), tts, session.lineup);
+        wav = await this.deps.tts.synthesize(spokenTurns(dialogue), tts, session.lineup);
       } catch (e) {
-        new Notice(this.rt[`err_${toGeminiError(e).kind}`]);
+        this.deps.notifier.notify(this.rt[`err_${toGeminiError(e).kind}`]);
         return null;
       }
       this.remember(key, wav);
@@ -416,7 +427,7 @@ export class DialogueController {
     if (!modal) return;
     const current = () => this.session === session && session.dialogue === dialogue && this.speakToken === token;
     const timeline = new TurnTimeline(spokenTurns(dialogue).slice(offset));
-    const speedMap = this.plugin.settings.tts.speed;
+    const speedMap = this.settings.tts.speed;
     const speed = speedMap[dialogue.language] ?? speedMap.en ?? 1.0;
     try {
       await this.ensurePlayer().play(wav, speed, {
@@ -445,10 +456,10 @@ export class DialogueController {
     const now = new Date();
     const lang = this.lang;
     this.memoryWrites = this.memoryWrites
-      .then(() => this.plugin.memory.record(use, session.sourceFile, session.lineup, memory, now, lang))
+      .then(() => this.deps.memory.record(use, session.sourceFile, session.lineup, memory, now, lang))
       .catch((e) => {
         console.warn("[angel-and-devil] could not write memory", e);
-        new Notice(this.rt.memoryWriteFailed);
+        this.deps.notifier.notify(this.rt.memoryWriteFailed);
       });
   }
 
@@ -459,7 +470,7 @@ export class DialogueController {
     const token = ++this.speakToken;
     const player = this.ensurePlayer();
     player.stop();
-    if (!this.plugin.settings.tts.confirmEveryTime) player.unlock();
+    if (!this.settings.tts.confirmEveryTime) player.unlock();
     if (!(await this.approveVoice(String(REPLY_TURNS)))) return;
     const current = () => this.session === session && session.dialogue === dialogue && this.speakToken === token;
     if (!current()) return;
@@ -485,12 +496,12 @@ export class DialogueController {
   ): Promise<Uint8Array | null> {
     const reply = dialogue.reply;
     if (!reply) return null;
-    const tts = this.plugin.settings.tts;
+    const tts = this.settings.tts;
     let clip: Uint8Array;
     try {
-      clip = await this.plugin.tts.synthesize(reply.turns, tts, session.lineup);
+      clip = await this.deps.tts.synthesize(reply.turns, tts, session.lineup);
     } catch (e) {
-      new Notice(this.rt[`err_${toGeminiError(e).kind}`]);
+      this.deps.notifier.notify(this.rt[`err_${toGeminiError(e).kind}`]);
       return null;
     }
     const beforeKey = await audioKey(before, tts);
@@ -508,14 +519,14 @@ export class DialogueController {
   private async resave(session: DialogueSession, dialogue: Dialogue): Promise<void> {
     const old = session.savedBlock;
     if (!old) return;
-    const block = toMarkdown(dialogue, this.plugin.settings.headingTemplate, session.savedAt ?? new Date(), session.lineup);
+    const block = toMarkdown(dialogue, this.settings.headingTemplate, session.savedAt ?? new Date(), session.lineup);
     session.savedBlock = block;
-    const result = await this.plugin.writer.replace(session.sourceFile, old, block);
+    const result = await this.deps.writer.replace(session.sourceFile, old, block);
     if (result === "not_found") {
-      new Notice(this.rt.sourceMissing);
+      this.deps.notifier.notify(this.rt.sourceMissing);
       return;
     }
-    new Notice(result === "appended" ? this.rt.replyResaveAppended : this.rt.replySavedNotice);
+    this.deps.notifier.notify(result === "appended" ? this.rt.replyResaveAppended : this.rt.replySavedNotice);
   }
 
   private remember(key: string, wav: Uint8Array): void {
@@ -537,13 +548,8 @@ export class DialogueController {
   }
 
   private openSettings(): void {
-    const setting = (this.plugin.app as unknown as {
-      setting?: { open(): void; openTabById(id: string): void };
-    }).setting;
-    if (!setting) return;
     this.close();
-    setting.open();
-    setting.openTabById(this.plugin.manifest.id);
+    this.deps.ui.openSettings();
   }
 }
 

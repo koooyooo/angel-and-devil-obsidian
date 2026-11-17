@@ -13,7 +13,7 @@ import {
 } from "../src/gemini/generator";
 import { REPLY_TURNS, buildReplySchema, parseReply } from "../src/gemini/schema";
 import { REPLY_MAX_CHARS, normalizeReply } from "../src/input";
-import { mergeSettings } from "../src/settings";
+import { mergeSettings } from "../src/settings-model";
 import type { Dialogue } from "../src/types";
 
 const lineup = [ANGEL_SPEC, DEVIL_SPEC] as const;

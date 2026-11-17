@@ -1,5 +1,3 @@
-import { getLanguage } from "obsidian";
-import { uiLanguageFor } from "./lang";
 import { de } from "./locales/de";
 import { es } from "./locales/es";
 import { fr } from "./locales/fr";
@@ -10,8 +8,6 @@ import type { Lang } from "./types";
 
 const ja = {
   pluginName: "天使と悪魔",
-  angel: "天使",
-  devil: "悪魔",
   commandStart: "掛け合いを開始",
   actionTitle: "天使と悪魔の掛け合い",
   thinking: "ノートを読んでいます…",
@@ -104,10 +100,8 @@ const ja = {
   setTtsAutoplayDesc: "掛け合いが表示されたら自動で読み上げます。「毎回確認する」がオンのときは確認が出ます。",
   setTtsSpeedJa: "再生速度（日本語）",
   setTtsSpeedEn: "再生速度（英語・その他の言語）",
-  setTtsVoiceAngel: "天使の声",
-  setTtsVoiceDevil: "悪魔の声",
-  setTtsStyleAngel: "天使の話し方",
-  setTtsStyleDevil: "悪魔の話し方",
+  setTtsVoice: (name: string) => `${name}の声`,
+  setTtsStyle: (name: string) => `${name}の話し方`,
   setTtsStyleDesc: "英語で書くのがおすすめです（例: warm, bright, polite）。",
   // memory
   setMemoryHeading: "記憶",
@@ -157,8 +151,6 @@ export type Strings = typeof ja;
 
 const en: Strings = {
   pluginName: "Angel & Devil",
-  angel: "Angel",
-  devil: "Devil",
   commandStart: "Start banter",
   actionTitle: "Angel & Devil banter",
   thinking: "Reading your note…",
@@ -249,10 +241,8 @@ const en: Strings = {
   setTtsAutoplayDesc: "Starts reading when the banter appears. You are still asked first while Confirm every time is on.",
   setTtsSpeedJa: "Playback speed (Japanese)",
   setTtsSpeedEn: "Playback speed (English and other languages)",
-  setTtsVoiceAngel: "Angel's voice",
-  setTtsVoiceDevil: "Devil's voice",
-  setTtsStyleAngel: "Angel's speaking style",
-  setTtsStyleDevil: "Devil's speaking style",
+  setTtsVoice: (name: string) => `${name}'s voice`,
+  setTtsStyle: (name: string) => `${name}'s speaking style`,
   setTtsStyleDesc: "English works best (e.g. warm, bright, polite).",
   setMemoryHeading: "Memory",
   setMemoryEnabled: "Remember banters",
@@ -306,17 +296,6 @@ const STRINGS: Record<string, Strings> = {
   de,
 };
 
-function detectUiLang(): Lang {
-  try {
-    return uiLanguageFor(getLanguage());
-  } catch {
-    return "en";
-  }
-}
-
-/** Obsidian's UI language mapped to a supported code. */
-export const uiLang: Lang = detectUiLang();
-
 export function stringsFor(lang: Lang): Strings {
   return STRINGS[lang] ?? en;
 }
@@ -324,14 +303,9 @@ export function stringsFor(lang: Lang): Strings {
 /**
  * Language of everything a launch shows: the banter modal, loading tips, notices, the TTS confirm and the
  * memory files. It is the plugin's language setting; with "auto" (match the note) the note's language is only
- * known after generation, so the screens stay in Obsidian's language while the banter follows the note.
+ * known after generation, so the screens stay in the app's UI language (`uiLanguage`) while the banter
+ * follows the note.
  */
-export function runtimeLanguage(setting: "auto" | Lang): Lang {
-  return setting === "auto" ? uiLang : setting;
+export function runtimeLanguage(setting: "auto" | Lang, uiLanguage: Lang): Lang {
+  return setting === "auto" ? uiLanguage : setting;
 }
-
-/**
- * Strings in Obsidian's UI language: for what Obsidian itself shows (settings tab, command names,
- * ribbon / header / status bar tooltips). Everything a launch shows uses `stringsFor(runtimeLanguage(...))`.
- */
-export const t: Strings = stringsFor(uiLang);

@@ -12,7 +12,7 @@ import {
   extractAudio,
   stripMarkup,
 } from "../src/gemini/tts";
-import { CURRENT_SCHEMA_VERSION, DEFAULT_SETTINGS, mergeSettings } from "../src/settings";
+import { CURRENT_SCHEMA_VERSION, DEFAULT_SETTINGS, mergeSettings } from "../src/settings-model";
 
 const cfg = DEFAULT_SETTINGS.tts;
 const turns = [

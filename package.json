@@ -1,14 +1,19 @@
 {
   "name": "obsidian-angel-and-devil",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "An angel and a devil read your note and banter about it.",
   "main": "main.js",
   "private": true,
   "type": "module",
   "scripts": {
+    "gen-characters": "node scripts/gen-characters.mjs",
+    "predev": "node scripts/gen-characters.mjs",
     "dev": "node esbuild.config.mjs",
+    "prebuild": "node scripts/gen-characters.mjs",
     "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "pretest": "node scripts/gen-characters.mjs",
     "test": "vitest run",
+    "pretypecheck": "node scripts/gen-characters.mjs",
     "typecheck": "tsc --noEmit --skipLibCheck"
   },
   "author": "koooyooo",
